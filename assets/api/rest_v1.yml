@@ -3094,7 +3094,7 @@ paths:
                 type: object
                 required: [apiVersion, version, ready, availablePitchers, settings, errors, schema]
                 properties:
-                  apiVersion: {type: integer, enum: [2]}
+                  apiVersion: {type: integer, enum: [3]}
                   version: {type: string}
                   ready: {type: boolean}
                   availablePitchers:
@@ -3165,26 +3165,25 @@ paths:
       description: >
         Pure calculation using caller-provided observations; it never writes
         settings or starts steam. The caller must revalidate live observations
-        before applying the returned duration, flow and heater target through PUT /api/v1/workflow. Calculation
-        and application are not atomic. Calibration must be complete, the machine
-        idle, probe stopping disabled, and the heater either Off (0) or at the calibration target. The returned
-        flow and heater target come from calibration; a different current flow is
-        accepted because the skin applies the configured flow. Sample ages cannot be authenticated by this endpoint.
+        before applying the returned duration and flow through PUT /api/v1/workflow.
+        Calculation and application are not atomic. Calibration must be complete,
+        the machine idle and probe stopping disabled. Heater temperature is not an
+        input, is not changed by the calculator, and does not compensate the time.
+        The caller restores its normal heater setting when leaving its temporary
+        Off state. Sample ages cannot be authenticated by this endpoint.
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [samples, machineState, steamFlow, steamTemperature, stopAtTemperature]
+              required: [samples, machineState, stopAtTemperature]
               properties:
                 jug:
                   type: string
                   enum: [auto, small, medium, large]
                   default: auto
                 machineState: {type: string, enum: [idle]}
-                steamFlow: {type: number, minimum: 0.1, maximum: 2.5}
-                steamTemperature: {type: integer, minimum: 0, maximum: 165}
                 stopAtTemperature: {type: number, enum: [0]}
                 samples:
                   type: array
@@ -3209,7 +3208,7 @@ paths:
                 type: object
                 required: [apiVersion, jug, jugSource, scaleGrams, jugGrams, milkGrams, durationSeconds, workflowPatch, calibrationRevision]
                 properties:
-                  apiVersion: {type: integer, enum: [2]}
+                  apiVersion: {type: integer, enum: [3]}
                   jug:
                     type: string
                     nullable: true
@@ -3229,12 +3228,11 @@ paths:
                     properties:
                       steamSettings:
                         type: object
-                        required: [duration, flow, targetTemperature]
+                        required: [duration, flow]
                         additionalProperties: false
                         properties:
                           duration: {type: integer, minimum: 1, maximum: 255}
-                          flow: {type: number, minimum: 0.1, maximum: 2.5}
-                          targetTemperature: {type: integer, minimum: 135, maximum: 165}
+                          flow: {type: number, minimum: 0.4, maximum: 2.5}
         "422":
           description: Invalid request, calibration, observations or operating conditions
           content:

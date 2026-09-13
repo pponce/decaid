@@ -30,8 +30,6 @@ void main() {
     'referenceMilkGrams': 150,
     'referenceSeconds': 25,
     'referenceFlow': 1.5,
-    'referenceSteamTemperature': 150,
-    'maxSeconds': 120,
   };
 
   Future<Map<String, dynamic>> invoke(
@@ -71,8 +69,6 @@ void main() {
         ],
         'jug': 'auto',
         'machineState': 'idle',
-        'steamFlow': 1.5,
-        'steamTemperature': 150,
         'stopAtTemperature': 0,
       },
     );
@@ -81,7 +77,7 @@ void main() {
     expect(body['durationSeconds'], 30);
     expect(body['jug'], 'small');
     expect(body['workflowPatch'], {
-      'steamSettings': {'duration': 30, 'flow': 1.5, 'targetTemperature': 150},
+      'steamSettings': {'duration': 30, 'flow': 1.5},
     });
     final invalid = await invoke(
       manager,

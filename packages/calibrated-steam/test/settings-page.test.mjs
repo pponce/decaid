@@ -6,7 +6,7 @@ import vm from 'node:vm';
 const source = readFileSync(new URL('../../../assets/plugins/calibrated-steam.reaplugin/plugin.js', import.meta.url), 'utf8');
 const partial = { autoDetect: false, smallJugGrams: 0, mediumJugGrams: 220, largeJugGrams: 0,
   defaultJug: 'medium', referenceMilkGrams: 150, referenceSeconds: 25,
-  referenceFlow: 1.5, referenceSteamTemperature: 150, maxSeconds: 120 };
+  referenceFlow: 1.5 };
 
 async function page(settings = partial, failSave = false) {
   const runtime = vm.createContext({});
@@ -56,6 +56,8 @@ test('standalone form exposes only configured starting pitchers and a working re
   assert.equal(p.fields.singleDrinkGrams.closest('fieldset').hidden, true);
   assert.equal(p.fields.singleDrinkGrams.required, false);
   assert.equal(p.ids['return-settings'].href, p.returnTo);
+  assert.equal(p.fields.referenceSteamTemperature, undefined);
+  assert.equal(p.fields.maxSeconds, undefined);
   assert.equal(p.fields.referenceFlow.min, '0.4');
   assert.equal(p.fields.referenceFlow.max, '2.5');
   await p.submit();

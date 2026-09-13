@@ -24,8 +24,7 @@ export function validateSettings(settings) {
   const errors = [];
   const names = {
     referenceMilkGrams: 'Calibration milk weight', referenceSeconds: 'Calibration time',
-    referenceFlow: 'Calibration flow', referenceSteamTemperature: 'Steam heater temperature',
-    maxSeconds: 'Maximum duration', singleDrinkGrams: 'Usual milk per drink',
+    referenceFlow: 'Calibration flow', singleDrinkGrams: 'Usual milk per drink',
     smallJugGrams: 'Small pitcher weight', mediumJugGrams: 'Medium pitcher weight', largeJugGrams: 'Large pitcher weight',
   };
   const range = (key, minimum, maximum, integer = false) => {
@@ -37,8 +36,6 @@ export function validateSettings(settings) {
   range('referenceMilkGrams', 10, 1500);
   range('referenceSeconds', 1, 255);
   range('referenceFlow', 0.4, 2.5);
-  range('referenceSteamTemperature', 135, 165, true);
-  range('maxSeconds', 1, 255, true);
   for (const key of ['smallJugGrams', 'mediumJugGrams', 'largeJugGrams']) range(key, settings[key] === 0 ? 0 : 1, 3000);
   if (!configuredPitchers(settings).length) errors.push({ field: 'pitchers', message: 'Enter at least one empty pitcher weight (1–3000 g).' });
   if (!['gross', 'tared'].includes(settings.weightMode)) errors.push({ field: 'weightMode', message: 'Choose gross or tared scale weight.' });
@@ -93,10 +90,6 @@ export function calculate(settings, input) {
   if (!availablePitchers(settings).includes(choice)) fail('pitcher_not_configured', 'Configure this pitcher selection in Settings before calculating.');
   if (input.machineState !== 'idle') fail('machine_not_idle', 'Wait until the machine is idle before setting a steam time.');
   if (!Number.isFinite(input.stopAtTemperature) || input.stopAtTemperature !== 0) fail('probe_stop_active', 'Turn off milk-probe stopping before using the calibrated timer.');
-  if (!Number.isFinite(input.steamFlow) || !Number.isFinite(input.steamTemperature) ||
-      (input.steamTemperature !== 0 && input.steamTemperature !== settings.referenceSteamTemperature)) {
-    fail('calibration_mismatch', `Calibration requires heater temperature ${settings.referenceSteamTemperature} °C. Restore this setting or recalibrate.`);
-  }
   const scaleGrams = stableWeight(input.samples);
   const tared = settings.weightMode === 'tared';
   const jug = choice !== 'auto' ? choice : (tared ? null : inferredJug(settings, scaleGrams));
@@ -104,10 +97,10 @@ export function calculate(settings, input) {
   const milkGrams = Math.round((scaleGrams - jugGrams) * 10) / 10;
   if (milkGrams < 10 || milkGrams > 1500) fail('invalid_milk_weight', 'Calculated milk weight must be 10–1500 g. Check the pitcher choice and whether the scale was tared.');
   const durationSeconds = Math.round(settings.referenceSeconds * milkGrams / settings.referenceMilkGrams);
-  if (durationSeconds < 1 || durationSeconds > settings.maxSeconds || durationSeconds > 255) fail('duration_out_of_range', `Calculated time ${durationSeconds}s is outside 1–${settings.maxSeconds}s. Check the calibration and milk amount.`);
+  if (durationSeconds < 1 || durationSeconds > 255) fail('duration_out_of_range', `Calculated time ${durationSeconds}s is outside the supported timer range of 1–255 seconds. Check the calibration and milk amount.`);
   return {
-    apiVersion: 2, jug, jugSource: tared ? 'tared' : (choice === 'auto' ? 'heuristic' : 'manual'),
+    apiVersion: 3, jug, jugSource: tared ? 'tared' : (choice === 'auto' ? 'heuristic' : 'manual'),
     scaleGrams, jugGrams, milkGrams, durationSeconds,
-    workflowPatch: { steamSettings: { duration: durationSeconds, flow: settings.referenceFlow, targetTemperature: settings.referenceSteamTemperature } },
+    workflowPatch: { steamSettings: { duration: durationSeconds, flow: settings.referenceFlow } },
   };
 }

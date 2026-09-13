@@ -1375,8 +1375,9 @@ The bundled [Auto Steam Calculator](CalibratedSteam.md#skin-developer-contract)
 provides milk-weight/time calibration and automatic pitcher selection inspired by
 Damian's DSx2. Supporting skins discover the loaded plugin, collect fresh scale
 observations through their existing connection, offer a pitcher choice, then recheck
-before applying duration, calibration flow and heater target through the workflow
-API. The plugin
+before applying duration and calibration flow through the workflow API.
+The skin restores its existing normal heater setting after Auto Off; the v3
+calculator does not capture heater calibration or compensate time for temperature. The plugin
 owns the calculation and settings; skins do not need to copy either. Streamline's
 companion integration adds Auto to the steam mode cycle and uses pitcher presets for direct calculation.
 Render `status.availablePitchers` and gate calculations on `ready`. Open the standalone

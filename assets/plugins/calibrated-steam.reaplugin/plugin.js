@@ -1,7 +1,7 @@
 /* Calibrated Steam Timer. GPL-3.0-only. Inspired by Damian / Damian-AU, DSx2. */
 (function () {
 "use strict";
-const MANIFEST = {"id":"calibrated-steam.reaplugin","name":"Auto Steam Calculator","author":"pponce; calculation and pitcher heuristic inspired by Damian / Damian-AU (DSx2)","description":"Estimate steam duration from milk weight using your calibration. Inspired by Damian's DSx2 calculator. This estimates temperature through time; it does not measure milk temperature.","version":"0.3.0","apiVersion":1,"permissions":["api"],"settings":{"smallJugGrams":{"type":"number","label":"Small empty pitcher (g)","description":"Untared weight of the empty small pitcher. Leave blank or 0 if not configured.","default":0},"mediumJugGrams":{"type":"number","label":"Medium empty pitcher (g)","description":"Untared weight of the empty medium pitcher. Leave blank or 0 if not configured.","default":0},"largeJugGrams":{"type":"number","label":"Large empty pitcher (g)","description":"Untared weight of the empty large pitcher. Leave blank or 0 if not configured.","default":0},"singleDrinkGrams":{"type":"number","label":"Usual milk per drink (g)","description":"Milk only for one drink; used to infer pitcher size in Auto. This can differ from your calibration milk weight.","default":0},"singleDrinkJug":{"type":"enum","label":"Pitcher normally used for one drink","description":"Select small or medium to choose the pitcher-detection thresholds.","values":["","small","medium"],"default":""},"weightMode":{"type":"enum","label":"Scale weight mode","description":"Gross includes the empty pitcher. Tared is milk only: pitcher size cannot be inferred and no pitcher weight is subtracted.","values":["gross","tared"],"default":"gross"},"referenceMilkGrams":{"type":"number","label":"Calibration milk weight (g)","description":"Milk only, excluding the pitcher, from your measured calibration run.","default":0},"referenceSeconds":{"type":"number","label":"Time to your desired milk temperature (s)","description":"Actual steaming time in the calibration run. Use similar milk, starting temperature and steaming technique for subsequent drinks.","default":0},"referenceFlow":{"type":"number","label":"Auto steam flow (ml/s)","description":"Flow used for calibration and applied in Auto steam mode. Configurable from 0.4 to 2.5 ml/s; default 0.4 ml/s. Recalibrate the time if you change this flow.","default":0.4},"referenceSteamTemperature":{"type":"number","label":"Calibration steam heater temperature (°C)","description":"Heater target used during calibration. Auto restores this target from Off when a time is calculated. This is not milk temperature.","default":0},"maxSeconds":{"type":"number","label":"Maximum calculated duration (s)","description":"Reject longer results rather than silently shortening them. Whole seconds, 1–255.","default":120},"defaultJug":{"type":"enum","label":"Starting pitcher selection","description":"Small, Medium or Large subtracts that pitcher weight. Auto guesses the pitcher using milk per drink. Streamline remembers subsequent preset selections.","values":["small","medium","large","auto"],"default":"small"},"autoDetect":{"type":"boolean","label":"Offer Auto pitcher selection","description":"Enable automatic detection using Damian’s heuristic. Requires all three pitcher weights, gross scale weight, usual milk per drink and the pitcher normally used for one drink.","default":false}},"api":[{"id":"status","type":"http","data":{}},{"id":"calculate","type":"http","data":{}},{"id":"validate","type":"http","data":{}},{"id":"ui","type":"http","data":{}}]};
+const MANIFEST = {"id":"calibrated-steam.reaplugin","name":"Auto Steam Calculator","author":"pponce; calculation and pitcher heuristic inspired by Damian / Damian-AU (DSx2)","description":"Estimate steam duration from milk weight using your calibration. Inspired by Damian's DSx2 calculator. This estimates temperature through time; it does not measure milk temperature.","version":"0.4.0","apiVersion":1,"permissions":["api"],"settings":{"smallJugGrams":{"type":"number","label":"Small empty pitcher (g)","description":"Untared weight of the empty small pitcher. Leave blank or 0 if not configured.","default":0},"mediumJugGrams":{"type":"number","label":"Medium empty pitcher (g)","description":"Untared weight of the empty medium pitcher. Leave blank or 0 if not configured.","default":0},"largeJugGrams":{"type":"number","label":"Large empty pitcher (g)","description":"Untared weight of the empty large pitcher. Leave blank or 0 if not configured.","default":0},"singleDrinkGrams":{"type":"number","label":"Usual milk per drink (g)","description":"Milk only for one drink; used to infer pitcher size in Auto. This can differ from your calibration milk weight.","default":0},"singleDrinkJug":{"type":"enum","label":"Pitcher normally used for one drink","description":"Select small or medium to choose the pitcher-detection thresholds.","values":["","small","medium"],"default":""},"weightMode":{"type":"enum","label":"Scale weight mode","description":"Gross includes the empty pitcher. Tared is milk only: pitcher size cannot be inferred and no pitcher weight is subtracted.","values":["gross","tared"],"default":"gross"},"referenceMilkGrams":{"type":"number","label":"Calibration milk weight (g)","description":"Milk only, excluding the pitcher, from your measured calibration run.","default":0},"referenceSeconds":{"type":"number","label":"Time to your desired milk temperature (s)","description":"Actual steaming time in the calibration run. Use similar milk, starting temperature and steaming technique for subsequent drinks.","default":0},"referenceFlow":{"type":"number","label":"Auto steam flow (ml/s)","description":"Flow used for calibration and applied in Auto steam mode. Configurable from 0.4 to 2.5 ml/s; default 0.4 ml/s. Recalibrate the time if you change this flow.","default":0.4},"defaultJug":{"type":"enum","label":"Starting pitcher selection","description":"Small, Medium or Large subtracts that pitcher weight. Auto guesses the pitcher using milk per drink. Streamline remembers subsequent preset selections.","values":["small","medium","large","auto"],"default":"small"},"autoDetect":{"type":"boolean","label":"Offer Auto pitcher selection","description":"Enable automatic detection using Damian’s heuristic. Requires all three pitcher weights, gross scale weight, usual milk per drink and the pitcher normally used for one drink.","default":false}},"api":[{"id":"status","type":"http","data":{}},{"id":"calculate","type":"http","data":{}},{"id":"validate","type":"http","data":{}},{"id":"ui","type":"http","data":{}}]};
 class CalculationError extends Error {
   constructor(code, message) {
     super(message);
@@ -28,8 +28,7 @@ function validateSettings(settings) {
   const errors = [];
   const names = {
     referenceMilkGrams: 'Calibration milk weight', referenceSeconds: 'Calibration time',
-    referenceFlow: 'Calibration flow', referenceSteamTemperature: 'Steam heater temperature',
-    maxSeconds: 'Maximum duration', singleDrinkGrams: 'Usual milk per drink',
+    referenceFlow: 'Calibration flow', singleDrinkGrams: 'Usual milk per drink',
     smallJugGrams: 'Small pitcher weight', mediumJugGrams: 'Medium pitcher weight', largeJugGrams: 'Large pitcher weight',
   };
   const range = (key, minimum, maximum, integer = false) => {
@@ -41,8 +40,6 @@ function validateSettings(settings) {
   range('referenceMilkGrams', 10, 1500);
   range('referenceSeconds', 1, 255);
   range('referenceFlow', 0.4, 2.5);
-  range('referenceSteamTemperature', 135, 165, true);
-  range('maxSeconds', 1, 255, true);
   for (const key of ['smallJugGrams', 'mediumJugGrams', 'largeJugGrams']) range(key, settings[key] === 0 ? 0 : 1, 3000);
   if (!configuredPitchers(settings).length) errors.push({ field: 'pitchers', message: 'Enter at least one empty pitcher weight (1–3000 g).' });
   if (!['gross', 'tared'].includes(settings.weightMode)) errors.push({ field: 'weightMode', message: 'Choose gross or tared scale weight.' });
@@ -97,10 +94,6 @@ function calculate(settings, input) {
   if (!availablePitchers(settings).includes(choice)) fail('pitcher_not_configured', 'Configure this pitcher selection in Settings before calculating.');
   if (input.machineState !== 'idle') fail('machine_not_idle', 'Wait until the machine is idle before setting a steam time.');
   if (!Number.isFinite(input.stopAtTemperature) || input.stopAtTemperature !== 0) fail('probe_stop_active', 'Turn off milk-probe stopping before using the calibrated timer.');
-  if (!Number.isFinite(input.steamFlow) || !Number.isFinite(input.steamTemperature) ||
-      (input.steamTemperature !== 0 && input.steamTemperature !== settings.referenceSteamTemperature)) {
-    fail('calibration_mismatch', `Calibration requires heater temperature ${settings.referenceSteamTemperature} °C. Restore this setting or recalibrate.`);
-  }
   const scaleGrams = stableWeight(input.samples);
   const tared = settings.weightMode === 'tared';
   const jug = choice !== 'auto' ? choice : (tared ? null : inferredJug(settings, scaleGrams));
@@ -108,11 +101,11 @@ function calculate(settings, input) {
   const milkGrams = Math.round((scaleGrams - jugGrams) * 10) / 10;
   if (milkGrams < 10 || milkGrams > 1500) fail('invalid_milk_weight', 'Calculated milk weight must be 10–1500 g. Check the pitcher choice and whether the scale was tared.');
   const durationSeconds = Math.round(settings.referenceSeconds * milkGrams / settings.referenceMilkGrams);
-  if (durationSeconds < 1 || durationSeconds > settings.maxSeconds || durationSeconds > 255) fail('duration_out_of_range', `Calculated time ${durationSeconds}s is outside 1–${settings.maxSeconds}s. Check the calibration and milk amount.`);
+  if (durationSeconds < 1 || durationSeconds > 255) fail('duration_out_of_range', `Calculated time ${durationSeconds}s is outside the supported timer range of 1–255 seconds. Check the calibration and milk amount.`);
   return {
-    apiVersion: 2, jug, jugSource: tared ? 'tared' : (choice === 'auto' ? 'heuristic' : 'manual'),
+    apiVersion: 3, jug, jugSource: tared ? 'tared' : (choice === 'auto' ? 'heuristic' : 'manual'),
     scaleGrams, jugGrams, milkGrams, durationSeconds,
-    workflowPatch: { steamSettings: { duration: durationSeconds, flow: settings.referenceFlow, targetTemperature: settings.referenceSteamTemperature } },
+    workflowPatch: { steamSettings: { duration: durationSeconds, flow: settings.referenceFlow } },
   };
 }
 
@@ -153,7 +146,7 @@ function settingsBrowser(resolveReturnUrl) {
       const groups = [
         ['Pitcher weights and selection', ['smallJugGrams', 'mediumJugGrams', 'largeJugGrams', 'weightMode', 'autoDetect', 'defaultJug']],
         ['Automatic pitcher detection', ['singleDrinkGrams', 'singleDrinkJug']],
-        ['Steam calibration', ['referenceMilkGrams', 'referenceSeconds', 'referenceFlow', 'referenceSteamTemperature', 'maxSeconds']],
+        ['Steam calibration', ['referenceMilkGrams', 'referenceSeconds', 'referenceFlow']],
       ];
       const labels = {};
       for (const [heading, keys] of groups) {
@@ -256,7 +249,7 @@ function settingsPage() {
 <h1>Auto Steam Calculator</h1><p>Measure how long a known weight of milk takes to reach your preferred temperature. Use similar starting milk temperature, milk type and steaming technique each time. The timer estimates the result; it does not read milk temperature.</p>
 <p>Enter at least one empty pitcher weight. Leave unused sizes blank or 0; only configured sizes appear in the steam controls. Choose a starting pitcher selection; the skin can remember subsequent selections.</p>
 <p>Enable <strong>Offer Auto pitcher selection</strong> if you want automatic detection. Then enter your usual milk per drink and the pitcher normally used for one drink. Damian’s detection thresholds require all three pitcher weights and <strong>gross</strong> scale weight (pitcher plus milk, without taring). With Auto detection disabled, you can configure just the sizes you use. <strong>Tared</strong> mode uses milk weight only and does not subtract the pitcher.</p>
-<p>For calibration, use manual Flow or Time mode to steam a known milk-only weight to your preferred temperature. Record the seconds, flow and heater target used. Auto steam mode applies these settings with each calculated time.</p><form id="settings"></form><p id="status" role="status" aria-live="polite">Loading settings…</p><button id="save" form="settings" type="submit" disabled>Save calibration</button>
+<p>For calibration, use manual Flow or Time mode to steam a known milk-only weight to your preferred temperature. Record the seconds and flow used. Auto steam mode applies that flow with each calculated time. Use the same normal steam heater setting; the calculator does not compensate for changes to heater or starting milk temperature.</p><form id="settings"></form><p id="status" role="status" aria-live="polite">Loading settings…</p><button id="save" form="settings" type="submit" disabled>Save calibration</button>
 <footer>Calibration formula and automatic pitcher-selection heuristic inspired by <a href="https://github.com/Damian-AU/DSx2">Damian / Damian-AU’s DSx2</a>. JavaScript implementation for Decaid by pponce.</footer>
 <script>(${settingsBrowser.toString()})(${settingsReturnUrl.toString()});</script></body></html>`;
 }
@@ -289,7 +282,7 @@ globalThis.createPlugin = function createPlugin() {
       const methods = { status: 'GET', calculate: 'POST', validate: 'POST', ui: 'GET' };
       if (!methods[endpoint]) return json(404, { code: 'not_found', message: 'Unknown endpoint.' });
       if (method !== methods[endpoint]) return json(405, { code: 'method_not_allowed', message: `Use ${methods[endpoint]}.` });
-      if (endpoint === 'status') return json(200, { apiVersion: 2, version: MANIFEST.version, ready: validateSettings(settings).length === 0, settings, availablePitchers: availablePitchers(settings), errors: validateSettings(settings), schema: MANIFEST.settings });
+      if (endpoint === 'status') return json(200, { apiVersion: 3, version: MANIFEST.version, ready: validateSettings(settings).length === 0, settings, availablePitchers: availablePitchers(settings), errors: validateSettings(settings), schema: MANIFEST.settings });
       if (endpoint === 'ui') return { status: 200, headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' }, body: settingsPage() };
       if (endpoint === 'validate') {
         if (!body || typeof body !== 'object' || Array.isArray(body)) return json(400, { code: 'invalid_request', message: 'Settings must be an object.' });

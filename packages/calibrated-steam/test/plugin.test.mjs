@@ -8,7 +8,7 @@ const source = readFileSync(new URL('plugin.js', asset), 'utf8');
 const manifest = JSON.parse(readFileSync(new URL('manifest.json', asset), 'utf8'));
 const valid = { autoDetect: true, smallJugGrams: 150, mediumJugGrams: 220, largeJugGrams: 300, singleDrinkGrams: 160,
   singleDrinkJug: 'small', weightMode: 'gross', referenceMilkGrams: 150, referenceSeconds: 25,
-  referenceFlow: 1.5, referenceSteamTemperature: 150, maxSeconds: 120 };
+  referenceFlow: 1.5 };
 function plugin(settings = valid) {
   const context = vm.createContext({});
   vm.runInContext(source, context);
@@ -27,7 +27,7 @@ test('built plugin runs without DOM, timers, network or other host capabilities'
   assert.equal(instance.id, manifest.id);
   const status = call(instance, 'status');
   assert.equal(status.json.ready, true);
-  assert.equal(status.json.apiVersion, 2);
+  assert.equal(status.json.apiVersion, 3);
 });
 
 test('fresh installs expose configuration requirements, never invented working values', () => {
@@ -37,14 +37,14 @@ test('fresh installs expose configuration requirements, never invented working v
   assert.ok(status.json.errors.length > 0);
 });
 
-test('calculate endpoint returns calibration flow, heater and duration patch and calibration revision', () => {
+test('calculate endpoint returns calibration flow and duration patch and calibration revision', () => {
   const response = call(plugin(), 'calculate', 'POST', {
     samples: [800, 400, 0].map(ageMs => ({ weightGrams: 330, ageMs })),
     jug: 'auto', machineState: 'idle', steamFlow: 1.5, steamTemperature: 150, stopAtTemperature: 0,
   });
   assert.equal(response.status, 200);
   assert.equal(response.json.durationSeconds, 30);
-  assert.deepEqual(response.json.workflowPatch, { steamSettings: { duration: 30, flow: 1.5, targetTemperature: 150 } });
+  assert.deepEqual(response.json.workflowPatch, { steamSettings: { duration: 30, flow: 1.5 } });
   assert.equal(JSON.parse(response.json.calibrationRevision).referenceSeconds, 25);
 });
 
@@ -88,4 +88,14 @@ test('status advertises only configured pitcher choices and Auto is opt-in', () 
 
 test('fresh and previously unset calibration flow default to 0.4 ml/s', () => {
   for (const values of [{}, { referenceFlow: 0 }]) assert.equal(call(plugin(values), 'status').json.settings.referenceFlow, 0.4);
+});
+
+
+test('removed calibration fields are absent from schema and ignored on upgrade', () => {
+  const status = call(plugin({ ...valid, maxSeconds: 20, referenceSteamTemperature: 0 }), 'status').json;
+  assert.equal(status.ready, true);
+  for (const key of ['maxSeconds', 'referenceSteamTemperature']) {
+    assert.equal(Object.hasOwn(status.schema, key), false);
+    assert.equal(Object.hasOwn(status.settings, key), false);
+  }
 });

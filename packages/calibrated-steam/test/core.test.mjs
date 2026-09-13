@@ -6,7 +6,7 @@ export const settings = {
   smallJugGrams: 150, mediumJugGrams: 220, largeJugGrams: 300,
   autoDetect: true, singleDrinkGrams: 160, singleDrinkJug: 'small', weightMode: 'gross',
   referenceMilkGrams: 150, referenceSeconds: 25,
-  referenceFlow: 1.5, referenceSteamTemperature: 150, maxSeconds: 120,
+  referenceFlow: 1.5,
 };
 export function request(weightGrams, extra = {}) {
   return {
@@ -22,7 +22,7 @@ test('calibrated ratio subtracts jug weight and rounds to whole seconds', () => 
   assert.equal(result.jug, 'small');
   assert.equal(result.milkGrams, 180);
   assert.equal(result.durationSeconds, 30);
-  assert.deepEqual(result.workflowPatch, { steamSettings: { duration: 30, flow: 1.5, targetTemperature: 150 } });
+  assert.deepEqual(result.workflowPatch, { steamSettings: { duration: 30, flow: 1.5 } });
 });
 
 test('Damian small-single heuristic uses strict > at both boundaries', () => {
@@ -70,9 +70,9 @@ test('rejects stale, too few, unordered, invalid and unstable readings', () => {
 
 test('rejects invalid configuration without silently substituting a calibration', () => {
   for (const invalid of [{ referenceMilkGrams: 0 }, { referenceSeconds: 0 },
-    { referenceFlow: Infinity }, { smallJugGrams: -1 }, { maxSeconds: 256 },
-    { maxSeconds: 1.5 }, { weightMode: 'guess' }, { singleDrinkJug: 'large' },
-    { referenceSeconds: '25' }, { referenceSteamTemperature: 80 },
+    { referenceFlow: Infinity }, { smallJugGrams: -1 },
+    { weightMode: 'guess' }, { singleDrinkJug: 'large' },
+    { referenceSeconds: '25' },
   ]) {
     assert.ok(validateSettings({ ...settings, ...invalid }).length);
     throwsCode(() => calculate({ ...settings, ...invalid }, request(330)), 'configuration_required');
@@ -82,15 +82,22 @@ test('rejects invalid configuration without silently substituting a calibration'
 test('refuses nonpositive milk, excessive milk and duration beyond the configured limit', () => {
   throwsCode(() => calculate(settings, request(150, { jug: 'small' })), 'invalid_milk_weight');
   throwsCode(() => calculate(settings, request(3000, { jug: 'small' })), 'invalid_milk_weight');
-  throwsCode(() => calculate({ ...settings, maxSeconds: 20 }, request(330)), 'duration_out_of_range');
+  throwsCode(() => calculate({ ...settings, referenceSeconds: 255 }, request(330)), 'duration_out_of_range');
 });
 
-test('calculator supplies calibration flow and restores the heater from Off', () => {
-  assert.equal(calculate(settings, request(330, { steamFlow: 1 })).workflowPatch.steamSettings.flow, 1.5);
-  assert.equal(calculate(settings, request(330, { steamTemperature: 0 })).workflowPatch.steamSettings.targetTemperature, 150);
-  throwsCode(() => calculate(settings, request(330, { steamTemperature: 140 })), 'calibration_mismatch');
+test('heater temperatures do not change the calculated time or appear in the patch', () => {
+  for (const steamTemperature of [undefined, 0, 135, 150, 165]) {
+    const result = calculate(settings, request(330, { steamTemperature }));
+    assert.equal(result.durationSeconds, 30);
+    assert.deepEqual(result.workflowPatch.steamSettings, { duration: 30, flow: 1.5 });
+  }
   throwsCode(() => calculate(settings, request(330, { stopAtTemperature: 60 })), 'probe_stop_active');
-  throwsCode(() => calculate(settings, request(330, { steamFlow: null })), 'calibration_mismatch');
+});
+
+test('no configurable maximum or stored calibration heater is needed or used', () => {
+  const result = calculate({ ...settings, referenceSeconds: 120, maxSeconds: 20, referenceSteamTemperature: 0 }, request(330));
+  assert.equal(result.durationSeconds, 144);
+  assert.equal(calculate({ ...settings, referenceSeconds: 255 }, request(300)).durationSeconds, 255);
 });
 
 test('only an idle machine can accept a calculated timer', () => {

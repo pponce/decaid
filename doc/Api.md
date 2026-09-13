@@ -733,11 +733,13 @@ Bundled but disabled by default. Once enabled, its `GET status`, `GET ui`,
 `/api/v1/plugins/calibrated-steam.reaplugin/`. It estimates a duration using saved
 milk-weight/time calibration and Damian's DSx2 pitcher-selection heuristic. Calculation
 does not control the machine: a skin revalidates the result and applies
-duration, calibration flow and heater target through `PUT /api/v1/workflow`. See
+duration and calibration flow through `PUT /api/v1/workflow`. The skin restores
+its existing normal heater setting after its temporary Off state. See
 [Auto Steam Calculator](CalibratedSteam.md) for configuration, request/response
 examples and the skin developer contract. No DYE2 dependency is required.
 
-Auto Steam Calculator v0.3.0 status includes `availablePitchers`. Skins render only
+Auto Steam Calculator v0.4.0 uses calculator API v3 (duration and flow only).
+Status includes `availablePitchers`. Skins render only
 those choices and require `ready` before calculating. The standalone `ui` accepts
 `returnTo` for returning to the calling skin's settings after save or cancellation.
 See [CalibratedSteam.md](CalibratedSteam.md) for setup rules and compatibility keys.

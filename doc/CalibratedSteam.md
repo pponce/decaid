@@ -22,7 +22,7 @@ returns to the calling settings page. Validation or save errors keep the form op
    Streamline remembers subsequent choices separately and falls back to the saved
    starting choice if the previously selected pitcher is removed.
 4. Using manual Flow or Time mode, steam a known milk-only weight to your preferred
-   temperature. Record the time, flow and heater target and enter this calibration.
+   temperature. Record the time and flow and enter this calibration.
 5. Save. Use similar milk, starting temperature and technique on later runs.
 
 Only configured sizes appear in the steam presets. With no setup, top-level Auto
@@ -39,8 +39,10 @@ involved. Success shows pitcher, milk mass and seconds; start steam normally aft
 Auto flow is configurable from **0.4 to 2.5 ml/s**, with **0.4 ml/s** as the
 default. Measure the calibration time at this flow; recalibrate if it changes.
 
-Auto applies the calibration flow and, when calculating, the calibration heater
-target. Entering Auto, finishing a steam cycle, reloading an active session, or
+Auto applies the calibration flow. After calculation, Streamline restores its
+normal heater setting from before Auto was entered (or its existing remembered
+normal setting if steam was already Off). No heater setting is stored in the
+calculator, and no temperature compensation is performed. Entering Auto, finishing a steam cycle, reloading an active session, or
 returning to it after settings/focus refresh resets to **Off** until the next
 calculation. Off means duration 0 and heater target 0, matching Streamline's manual
 Off behavior. It is a reminder rather than a hardware start interlock: a physical
@@ -92,7 +94,7 @@ proof that the plugin is running. Restore the skin's usual steam UI if disabled.
 | GET | `status` | API version, readiness, `availablePitchers`, current settings, validation errors and setting schema |
 | GET | `ui` | Standalone settings form with a `returnTo` query parameter |
 | POST | `validate` | Validate a complete settings object without storing it |
-| POST | `calculate` | Return a calculation and duration, flow and heater workflow patch; performs no write |
+| POST | `calculate` | Return a calculation and duration/flow workflow patch; performs no write |
 
 Prefix endpoints with `/api/v1/plugins/calibrated-steam.reaplugin/`.
 Settings are persisted through the existing
@@ -133,8 +135,6 @@ Example request body for `calculate`:
   ],
   "jug": "auto",
   "machineState": "idle",
-  "steamFlow": 1.5,
-  "steamTemperature": 150,
   "stopAtTemperature": 0
 }
 ```
@@ -153,25 +153,35 @@ With a 150 g small pitcher and a 150 g / 25 s calibration, the example returns
 `durationSeconds: 30`, and:
 
 ```json
-{"steamSettings": {"duration": 30, "flow": 1.5, "targetTemperature": 150}}
+{"steamSettings": {"duration": 30, "flow": 1.5}}
 ```
 
-The response also contains `scaleGrams`, `jugGrams`, `apiVersion: 2` and an opaque
+The response also contains `scaleGrams`, `jugGrams`, `apiVersion: 3` and an opaque
 `calibrationRevision`. Do not parse the revision: compare it to invalidate a
 preview when the settings change. `jugSource` is `heuristic`, `manual` or `tared`.
 Tared mode requires an explicit configured pitcher choice; Auto detection is unavailable.
 
-The calculator contract is version 2 (plugin manifest apiVersion remains the
-Decaid host contract version 1). Earlier draft clients expecting a duration-only
-patch must update. Check status.apiVersion before activating a client.
+The calculator contract is **version 3** in plugin **v0.4.0**; the plugin manifest
+apiVersion remains Decaid host version 1. The response contains duration and flow
+only. Both v2 clients and plugins must be updated together because heater handling
+now belongs to the skin. Check status.apiVersion before using the calculator.
+Old `referenceSteamTemperature` and `maxSeconds` settings are ignored and removed
+from the form and normalized status. There is no configurable maximum duration;
+results must still fit the supported 1–255-second timer range.
+
+Damian's `skin_steam_time_calc` uses calibration time, calibration milk weight,
+scale weight and pitcher weight. It neither scales time for heater temperature nor
+captures a heater calibration value, and has no separate maximum-duration cap.
+The matching equation here likewise does not compensate for heater or starting
+milk temperature. Recalibrate if the steaming conditions change.
 
 Before applying, obtain fresh workflow and machine state and recalculate with
-fresh scale samples. Reject changed observations or calibration. Apply the returned
-three fields together through `PUT /api/v1/workflow`; never start steam or run the
-stop countdown in a WebView. The supplied heater target may be 0 (Off); a different
-enabled target must match calibration. Current flow may differ because the
-returned flow is applied. Probe stopping must be zero when calculating. Streamline
-captures its prior value and explicitly clears it on Auto entry.
+fresh scale samples. Reject changed observations or calibration. Apply duration
+and flow together through `PUT /api/v1/workflow`; never start steam or run the
+stop countdown in a WebView. If the skin has put steam Off, restore its existing
+normal heater setting as part of the same write. Do not invent a new heater target
+or use one to change the calculated time. Probe stopping must be zero when
+calculating. Streamline captures its prior value and clears it on Auto entry.
 
 Skins own Auto-session transitions. Capture and persist the manual settings before
 writing Off, keep them through reloads and failed writes, and restore them before
@@ -182,8 +192,7 @@ workflow write succeeds. A lost response can leave the final state uncertain.
 Separate calculation and application calls are not an atomic machine lock.
 
 HTTP 422 carries `{code, message}` for configuration, scale readiness, invalid
-milk mass, duration limits, non-idle machine, active probe stop or heater
-mismatch. An unloaded plugin is rejected by Decaid with 404 before dispatch.
+milk mass, the supported timer range, non-idle machine or active probe stop. An unloaded plugin is rejected by Decaid with 404 before dispatch.
 Handle unavailable plugins and API failures without applying a cached result. Requests for an unavailable pitcher return `pitcher_not_configured`.
 
 ## Source and maintenance
@@ -213,10 +222,10 @@ curl -sf -X POST http://localhost:8080/api/v1/plugins/calibrated-steam.reaplugin
 curl -sf http://localhost:8080/api/v1/plugins/calibrated-steam.reaplugin/status
 curl -sf -X POST http://localhost:8080/api/v1/plugins/calibrated-steam.reaplugin/settings \
   -H 'Content-Type: application/json' \
-  -d '{"autoDetect":true,"smallJugGrams":150,"mediumJugGrams":220,"largeJugGrams":300,"singleDrinkGrams":160,"singleDrinkJug":"small","weightMode":"gross","referenceMilkGrams":150,"referenceSeconds":25,"referenceFlow":1.5,"referenceSteamTemperature":150,"maxSeconds":120}'
+  -d '{"autoDetect":true,"smallJugGrams":150,"mediumJugGrams":220,"largeJugGrams":300,"singleDrinkGrams":160,"singleDrinkJug":"small","weightMode":"gross","referenceMilkGrams":150,"referenceSeconds":25,"referenceFlow":1.5}'
 curl -sf -X POST http://localhost:8080/api/v1/plugins/calibrated-steam.reaplugin/calculate \
   -H 'Content-Type: application/json' \
-  -d '{"samples":[{"weightGrams":330,"ageMs":800},{"weightGrams":330,"ageMs":400},{"weightGrams":330,"ageMs":0}],"machineState":"idle","steamFlow":1.5,"steamTemperature":150,"stopAtTemperature":0}'
+  -d '{"samples":[{"weightGrams":330,"ageMs":800},{"weightGrams":330,"ageMs":400},{"weightGrams":330,"ageMs":0}],"machineState":"idle","stopAtTemperature":0}'
 ```
 
 The initial status must be unconfigured on a clean installation; after setting

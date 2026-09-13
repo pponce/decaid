@@ -19,7 +19,7 @@ function settingsBrowser(resolveReturnUrl) {
       const groups = [
         ['Pitcher weights and selection', ['smallJugGrams', 'mediumJugGrams', 'largeJugGrams', 'weightMode', 'autoDetect', 'defaultJug']],
         ['Automatic pitcher detection', ['singleDrinkGrams', 'singleDrinkJug']],
-        ['Steam calibration', ['referenceMilkGrams', 'referenceSeconds', 'referenceFlow', 'referenceSteamTemperature', 'maxSeconds']],
+        ['Steam calibration', ['referenceMilkGrams', 'referenceSeconds', 'referenceFlow']],
       ];
       const labels = {};
       for (const [heading, keys] of groups) {
@@ -122,7 +122,7 @@ function settingsPage() {
 <h1>Auto Steam Calculator</h1><p>Measure how long a known weight of milk takes to reach your preferred temperature. Use similar starting milk temperature, milk type and steaming technique each time. The timer estimates the result; it does not read milk temperature.</p>
 <p>Enter at least one empty pitcher weight. Leave unused sizes blank or 0; only configured sizes appear in the steam controls. Choose a starting pitcher selection; the skin can remember subsequent selections.</p>
 <p>Enable <strong>Offer Auto pitcher selection</strong> if you want automatic detection. Then enter your usual milk per drink and the pitcher normally used for one drink. Damian’s detection thresholds require all three pitcher weights and <strong>gross</strong> scale weight (pitcher plus milk, without taring). With Auto detection disabled, you can configure just the sizes you use. <strong>Tared</strong> mode uses milk weight only and does not subtract the pitcher.</p>
-<p>For calibration, use manual Flow or Time mode to steam a known milk-only weight to your preferred temperature. Record the seconds, flow and heater target used. Auto steam mode applies these settings with each calculated time.</p><form id="settings"></form><p id="status" role="status" aria-live="polite">Loading settings…</p><button id="save" form="settings" type="submit" disabled>Save calibration</button>
+<p>For calibration, use manual Flow or Time mode to steam a known milk-only weight to your preferred temperature. Record the seconds and flow used. Auto steam mode applies that flow with each calculated time. Use the same normal steam heater setting; the calculator does not compensate for changes to heater or starting milk temperature.</p><form id="settings"></form><p id="status" role="status" aria-live="polite">Loading settings…</p><button id="save" form="settings" type="submit" disabled>Save calibration</button>
 <footer>Calibration formula and automatic pitcher-selection heuristic inspired by <a href="https://github.com/Damian-AU/DSx2">Damian / Damian-AU’s DSx2</a>. JavaScript implementation for Decaid by pponce.</footer>
 <script>(${settingsBrowser.toString()})(${settingsReturnUrl.toString()});</script></body></html>`;
 }
