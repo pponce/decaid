@@ -1,4 +1,4 @@
-function settingsBrowser(resolveReturnUrl) {
+function settingsBrowser(resolveReturnUrl, mountCalibration, captureWeight) {
   const base = '/api/v1/plugins/calibrated-steam.reaplugin';
   const form = document.getElementById('settings');
   const status = document.getElementById('status');
@@ -6,10 +6,13 @@ function settingsBrowser(resolveReturnUrl) {
   const back = document.getElementById('return-settings');
   back.href = resolveReturnUrl(window.location.href, document.referrer);
   let schema = {};
+  let guided = null;
   async function request(path, options) {
     const response = await fetch(path, options);
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.message || data.error || (data.errors || []).map(error => error.message).join(' ') || 'Request failed.');
+    const text = await response.text();
+    let data;
+    try { data = text ? JSON.parse(text) : {}; } catch { data = {}; }
+    if (!response.ok) throw Object.assign(new Error(data.message || data.error || (data.errors || []).map(error => error.message).join(' ') || 'Request failed.'), { data });
     return data;
   }
   async function load() {
@@ -95,12 +98,14 @@ function settingsBrowser(resolveReturnUrl) {
       updateChoices();
       status.textContent = data.ready ? 'Calibration is ready.' : 'Enter at least one pitcher weight and your measured calibration. Steam stays Off in Auto mode until setup and a calculation are complete.';
       save.disabled = false;
+      guided = mountCalibration({ form, labels, save, back, status, request, base, field, updateChoices }, captureWeight);
     } catch (error) { status.textContent = error.message; }
   }
   form.addEventListener('submit', async event => {
     event.preventDefault();
     save.disabled = true;
     try {
+      guided?.assertCanSave();
       const values = Object.fromEntries(Object.entries(schema).map(([key, item]) => {
         const input = form.elements.namedItem(key);
         return [key, item.type === 'boolean' ? input.checked : item.type === 'number' ? (input.value.trim() === '' ? 0 : Number(input.value)) : input.value];
@@ -117,12 +122,12 @@ function settingsBrowser(resolveReturnUrl) {
 
 function settingsPage() {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Auto Steam Calculator</title>
-<style>:root{color-scheme:light dark;font:18px system-ui,sans-serif}body{max-width:850px;margin:auto;padding:24px;background:Canvas;color:CanvasText}h1{font-size:28px}p{line-height:1.5}fieldset{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:22px;border:1px solid GrayText;border-radius:8px;padding:20px}legend{font-weight:600}fieldset[hidden]{display:none}form{display:grid;grid-template-columns:1fr;gap:22px}label{display:flex;flex-direction:column;gap:8px}label span{font-weight:600}small{opacity:.8;line-height:1.4}input,select,button{font:inherit;padding:12px;border:1px solid GrayText;border-radius:8px;color:CanvasText;background:Canvas}input[type=checkbox]{width:28px;height:28px}button{cursor:pointer;min-height:48px}#status{min-height:2em}a{color:LinkText}#return-settings{display:inline-block;padding:14px 18px;border:1px solid GrayText;border-radius:8px;text-decoration:none}footer{margin-top:28px;font-size:15px}</style></head><body>
+<style>:root{color-scheme:light dark;font:18px system-ui,sans-serif}body{max-width:850px;margin:auto;padding:24px;background:Canvas;color:CanvasText}h1{font-size:28px}p{line-height:1.5}fieldset{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:22px;border:1px solid GrayText;border-radius:8px;padding:20px}legend{font-weight:600}fieldset[hidden]{display:none}form{display:grid;grid-template-columns:1fr;gap:22px}label{display:flex;flex-direction:column;gap:8px}label span{font-weight:600}small{opacity:.8;line-height:1.4}input,select,button{font:inherit;padding:12px;border:1px solid GrayText;border-radius:8px;color:CanvasText;background:Canvas}input[type=checkbox]{width:28px;height:28px}button{cursor:pointer;min-height:48px}#status{min-height:2em}a{color:LinkText}#return-settings{display:inline-block;padding:14px 18px;border:1px solid GrayText;border-radius:8px;text-decoration:none}.full-width{grid-column:1/-1}.guided-calibration{display:block}.calibration-actions{display:flex;flex-wrap:wrap;gap:12px}.calibration-timer{font-size:28px;font-variant-numeric:tabular-nums}button:disabled{opacity:.5;cursor:default}footer{margin-top:28px;font-size:15px}</style></head><body>
 <a id="return-settings" href="/api/v1/plugins/settings.reaplugin/ui">Return to settings</a>
 <h1>Auto Steam Calculator</h1><p>Measure how long a known weight of milk takes to reach your preferred temperature. Use similar starting milk temperature, milk type and steaming technique each time. The timer estimates the result; it does not read milk temperature.</p>
 <p>Enter at least one empty pitcher weight. Leave unused sizes blank or 0; only configured sizes appear in the steam controls. Choose a starting pitcher selection; the skin can remember subsequent selections.</p>
 <p>Enable <strong>Offer Auto pitcher selection</strong> if you want automatic detection. Then enter your usual milk per drink and the pitcher normally used for one drink. Damian’s detection thresholds require all three pitcher weights and <strong>gross</strong> scale weight (pitcher plus milk, without taring). With Auto detection disabled, you can configure just the sizes you use. <strong>Tared</strong> mode uses milk weight only and does not subtract the pitcher.</p>
-<p>For calibration, use manual Flow or Time mode to steam a known milk-only weight to your preferred temperature. Record the seconds and flow used. Auto steam mode applies that flow with each calculated time. Use the same normal steam heater setting; the calculator does not compensate for changes to heater or starting milk temperature.</p><form id="settings"></form><p id="status" role="status" aria-live="polite">Loading settings…</p><button id="save" form="settings" type="submit" disabled>Save calibration</button>
+<p>Use guided calibration below to capture pitcher weights and measure a steam run, or enter a milk-only weight and time measured separately. Set the flow before preparing calibration. Auto steam mode applies that flow with each calculated time. Use the same normal steam heater setting; the calculator does not compensate for changes to heater or starting milk temperature.</p><form id="settings"></form><p id="status" role="status" aria-live="polite">Loading settings…</p><button id="save" form="settings" type="submit" disabled>Save calibration</button>
 <footer>Calibration formula and automatic pitcher-selection heuristic inspired by <a href="https://github.com/Damian-AU/DSx2">Damian / Damian-AU’s DSx2</a>. JavaScript implementation for Decaid by pponce.</footer>
-<script>(${settingsBrowser.toString()})(${settingsReturnUrl.toString()});</script></body></html>`;
+<script>(${settingsBrowser.toString()})(${settingsReturnUrl.toString()},${mountCalibrationPage.toString()},${captureScaleWeight.toString()});</script></body></html>`;
 }

@@ -13,7 +13,9 @@ from **Extensions > Plugins > Open**. Both entry points provide a return address
 **Return to settings** leaves without saving, and a successful **Save calibration**
 returns to the calling settings page. Validation or save errors keep the form open.
 
-1. Enter at least one empty pitcher weight. Blank or 0 means an unused size.
+1. Enter at least one empty pitcher weight, or use **Tare empty scale** and then
+   **Set from scale** for each size. Wait for the stable-zero message before
+   placing an empty pitcher on the scale. Blank or 0 means an unused size.
 2. Optionally enable **Offer Auto pitcher selection**. This reveals the required
    usual milk per drink and the Small/Medium pitcher normally used for one drink.
    Damian's existing heuristic needs all three pitcher weights and gross scale
@@ -21,8 +23,13 @@ returns to the calling settings page. Validation or save errors keep the form op
 3. Choose a starting selection from the configured sizes (and Auto, if ready).
    Streamline remembers subsequent choices separately and falls back to the saved
    starting choice if the previously selected pitcher is removed.
-4. Using manual Flow or Time mode, steam a known milk-only weight to your preferred
-   temperature. Record the time and flow and enter this calibration.
+4. Set your calibration flow, then follow **Guided calibration** on this page:
+   tare the empty scale, choose a configured pitcher, place it with cold milk on
+   the scale, and **Capture pitcher + milk**. Review the milk-only weight,
+   **Prepare calibration**, then **Start steam**. Stop at your preferred milk
+   temperature using **Stop steam** or the machine control. Physical start also
+   works after preparation. The page fills the measured weight, time and flow.
+   Alternatively, enter values measured using normal manual steam controls.
 5. Save. Use similar milk, starting temperature and technique on later runs.
 
 Only configured sizes appear in the steam presets. With no setup, top-level Auto
@@ -59,6 +66,37 @@ the pitcher. **Tared** means milk only: no pitcher weight is subtracted and auto
 identification is unavailable. The software cannot detect a physical tare button
 press; the selected mode must match the scale display.
 
+## Guided calibration details
+
+Tare always means an **empty scale**, never a pitcher already on it. The page waits
+for a stable zero (within 0.5 g), then allows capture from at least three fresh
+samples spanning 500 ms with no more than 2 g spread. This cannot detect a later
+press of the scale's physical tare button. Repeat the empty-scale tare if unsure.
+Guided calibration always subtracts the explicitly selected pitcher from gross
+weight, including when everyday calculation uses Tared mode. Auto inference is
+not used for calibration. Initial milk weight is frozen before steam starts;
+removing the pitcher from the scale does not change it.
+
+Preparation applies the form's flow (0.4–2.5 ml/s), the existing normal heater
+setting and a temporary duration of 255 seconds, with probe stopping disabled.
+255 is the existing machine timer ceiling, not a new user setting. The user stops
+at their desired temperature. The measured counter follows machine snapshot
+`pouring` time, excluding warm-up, and waits for confirmed idle before completing.
+Runs reaching the timer ceiling, paused runs and interrupted telemetry are not
+accepted as calibration. After review, Save stores values and returns to settings.
+Changing flow after a guided run clears its measured time and requires recalibration
+or a manually measured replacement. Capture fresh milk to try again.
+
+The plugin owns preparation and restoration; the page renews its session lease.
+Return to settings cancels an active run and waits for restoration before navigating.
+Page closure or a six-second heartbeat gap cancels the run. Machine telemetry gaps
+over three seconds invalidate it. The plugin requests stop and restores the prior
+steam settings after confirmed idle, retrying a failed restoration while loaded.
+Results are exposed only after restoration succeeds. App termination or forcibly
+unloading the plugin ends this protection; incomplete results are never saved and
+previous settings should be checked after restarting. A stopped app cannot issue
+machine commands. The machine's own timer remains in effect.
+
 ## Attribution and calculation
 
 The formula and pitcher-selection heuristic are inspired by Damian / Damian-AU's
@@ -91,16 +129,17 @@ proof that the plugin is running. Restore the skin's usual steam UI if disabled.
 
 | Method | Plugin endpoint | Purpose |
 | --- | --- | --- |
-| GET | `status` | API version, readiness, `availablePitchers`, current settings, validation errors and setting schema |
+| GET | `status` | API version, `calibrationActive`, readiness, `availablePitchers`, current settings, validation errors and setting schema |
 | GET | `ui` | Standalone settings form with a `returnTo` query parameter |
 | POST | `validate` | Validate a complete settings object without storing it |
 | POST | `calculate` | Return a calculation and duration/flow workflow patch; performs no write |
+| POST | `calibration` | Prepare, start, stop, cancel or renew an owned guided calibration session |
 
 Prefix endpoints with `/api/v1/plugins/calibrated-steam.reaplugin/`.
 Settings are persisted through the existing
 `POST /api/v1/plugins/calibrated-steam.reaplugin/settings` endpoint. That endpoint
 reloads a loaded plugin. Use `validate` first for actionable calibration errors.
-The form and all four endpoints work offline against the local Decaid server.
+The form and its endpoints work offline against the local Decaid server.
 
 Plugin v0.3.0 adds `availablePitchers` to status, for example `["medium"]` or
 `["small", "medium", "large", "auto"]`. Render these choices instead of hard-coding
@@ -123,6 +162,45 @@ tries a same-host referrer, then falls back to Decaid's settings plugin. The plu
 has no dependency on Streamline routes. Streamline supplies its `?page=settings`
 URL and restores the selected settings category from its existing navigation state.
 
+
+### Reusing guided calibration in another skin
+
+Opening the shared `ui` is sufficient; skins do not need their own scale or
+calibration UI. When temporarily parking the heater Off, a skin may pass its
+remembered normal heater target as `steamHeaterTemperature=145` alongside
+`returnTo`. Only integer targets 135–165 °C are accepted. The live workflow's
+positive heater target takes precedence. If neither is available, the page asks
+the user to enable the normal steam heater before calibrating. The value is used
+for machine operation, not stored as calibration or used for temperature scaling.
+Streamline supplies its existing saved target from both Open settings entry points.
+
+Before an Auto workflow write, consult `status.calibrationActive`. If true, defer
+Auto resets, calculated writes and manual-backup restoration. Do not rewrite
+steam settings from another client during calibration. `calculate` returns 409
+while calibration owns the machine settings. This is cooperative skin coordination,
+not a global lock on Decaid's workflow API. The calculator remains API v3; v0.5.0
+adds this status field and the separate calibration endpoint.
+
+A custom guided UI can `POST calibration` with:
+
+```json
+{"action":"begin","pitcher":"small","pitcherGrams":150,"milkGrams":160,"flow":0.4,"heaterTemperature":145}
+```
+
+`begin` validates idle state, fresh host machine telemetry, pitcher/milk ranges,
+flow and heater availability before preparation. Weights come from the caller's
+validated capture; the endpoint does not authenticate scale samples. The response
+includes an opaque `token`, `active`, `phase`, `message`, `seconds`, `measurement`
+and `result`. Subsequent requests use `{action, token}`, with action `heartbeat`,
+`start`, `stop` or `cancel`. Renew at least every two seconds while active; the
+bundled page renews every 500 ms to show the counter. Only the owning token can
+control a session; concurrent begins return 409. Phase progresses through
+`preparing`, `armed`, `starting`/`heating`/`steaming`, `restoring`, then `complete`
+or `failed`. Result remains null until a valid run has ended and restoration
+has succeeded. A complete result contains milkGrams, pitcher, pitcherGrams, flow
+and measured seconds. It is not automatically persisted. On page hide, request
+cancel with keepalive; the lease is the fallback if that request cannot arrive.
+Do not reload or disable the plugin during an active session.
 
 Example request body for `calculate`:
 

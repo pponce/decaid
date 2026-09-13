@@ -23,7 +23,7 @@ function call(instance, endpoint, method = 'GET', body = null) {
 
 test('built plugin runs without DOM, timers, network or other host capabilities', () => {
   const instance = plugin();
-  assert.deepEqual(manifest.permissions, ['api']);
+  assert.deepEqual(manifest.permissions, ['api', 'events.machine']);
   assert.equal(instance.id, manifest.id);
   const status = call(instance, 'status');
   assert.equal(status.json.ready, true);

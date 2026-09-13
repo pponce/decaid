@@ -11,3 +11,8 @@ needed. Source lives in `src/`, and the committed build output lives in
 The formula and automatic pitcher-selection heuristic are inspired by
 [Damian / Damian-AU's DSx2](https://github.com/Damian-AU/DSx2). The new JavaScript
 implementation is licensed under Decaid's GPL-3.0-only license.
+
+`calibration-session.mjs` owns temporary machine settings and measured pouring
+time. `calibration-page.js` owns the browser's scale capture and guided controls.
+The runtime starts no calibration timers or machine writes until an explicit
+calibration request. See the guide for lease, cancellation and restoration limits.

@@ -3092,11 +3092,14 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [apiVersion, version, ready, availablePitchers, settings, errors, schema]
+                required: [apiVersion, version, ready, availablePitchers, settings, errors, schema, calibrationActive]
                 properties:
                   apiVersion: {type: integer, enum: [3]}
                   version: {type: string}
                   ready: {type: boolean}
+                  calibrationActive:
+                    type: boolean
+                    description: Guided calibration owns temporary steam settings. Skins must defer Auto writes and resets until false.
                   availablePitchers:
                     type: array
                     description: Configured pitcher choices. Auto appears only when explicitly enabled with valid detection settings; check ready before calculating.
@@ -3121,12 +3124,76 @@ paths:
           required: false
           schema: {type: string, format: uri}
           description: Calling skin settings URL on the same host. Used by Return to settings and after a successful save; falls back to local Decaid settings.
+        - in: query
+          name: steamHeaterTemperature
+          required: false
+          schema: {type: integer, minimum: 135, maximum: 165}
+          description: Optional remembered normal heater target, used for guided calibration only when the workflow heater target is Off. Not stored or used for temperature compensation.
       responses:
         "200":
-          description: Standalone form suitable for embedding in a skin iframe
+          description: Standalone settings page with scale tare, pitcher capture and guided steam calibration
           content:
             text/html:
               schema: {type: string}
+        "404":
+          description: Plugin is not loaded
+
+  /api/v1/plugins/calibrated-steam.reaplugin/calibration:
+    post:
+      summary: Control an owned guided steam calibration session
+      tags: [Plugins]
+      description: >
+        Begin requires fresh idle machine telemetry, captured milk and pitcher
+        weights, and flow. It applies temporary machine settings but does not
+        start steam. Start and stop send machine commands; physical controls also
+        work. Heartbeats renew a six-second page lease. Cancel, an expired lease,
+        or a machine telemetry gap invalidate the run and restore prior steam
+        settings after confirmed idle. Result is exposed only after restoration.
+        See doc/CalibratedSteam.md for lifecycle and app-termination limits.
+        These actions do not save plugin settings.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action: {type: string, enum: [begin, heartbeat, start, stop, cancel]}
+                token:
+                  type: string
+                  description: Opaque ownership token returned by begin; required for all subsequent actions.
+                pitcher:
+                  type: string
+                  enum: [small, medium, large]
+                  description: Required for begin. Explicit pitcher used for calibration; never inferred.
+                pitcherGrams: {type: number, minimum: 1, maximum: 3000, description: Required for begin. Empty pitcher weight.}
+                milkGrams: {type: number, minimum: 10, maximum: 1500, description: Required for begin. Captured milk-only weight.}
+                flow: {type: number, minimum: 0.4, maximum: 2.5, description: Required for begin. Calibration flow in ml/s.}
+                heaterTemperature:
+                  type: integer
+                  minimum: 135
+                  maximum: 165
+                  description: Optional normal heater target when the workflow heater is Off. Not saved as calibration.
+      responses:
+        "200":
+          description: Current session state; completion does not persist calibration
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SteamCalibrationSession'}
+        "400":
+          description: Invalid action or request shape
+        "409":
+          description: Busy machine, invalid calibration inputs, wrong session token, interrupted preparation or failed machine command; response may include session state for recovery
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: {type: string}
+                  token: {type: string, nullable: true}
+                  active: {type: boolean}
+                  phase: {type: string}
         "404":
           description: Plugin is not loaded
 
@@ -3233,6 +3300,8 @@ paths:
                         properties:
                           duration: {type: integer, minimum: 1, maximum: 255}
                           flow: {type: number, minimum: 0.4, maximum: 2.5}
+        "409":
+          description: Guided calibration is active; finish or cancel it before calculating
         "422":
           description: Invalid request, calibration, observations or operating conditions
           content:
@@ -6114,6 +6183,36 @@ components:
           enum: [block_no_scale]
         details:
           type: string
+
+    SteamCalibrationSession:
+      type: object
+      required: [token, active, phase, message, seconds, measurement, result]
+      properties:
+        token: {type: string}
+        active: {type: boolean, description: True until the prior steam settings have been restored.}
+        phase:
+          type: string
+          enum: [idle, preparing, armed, starting, heating, steaming, restoring, complete, failed]
+        message: {type: string}
+        seconds: {type: number, minimum: 0, description: Measured pouring time; excludes boiler warm-up.}
+        measurement:
+          type: object
+          nullable: true
+          properties:
+            pitcher: {type: string, enum: [small, medium, large]}
+            pitcherGrams: {type: number}
+            milkGrams: {type: number}
+            flow: {type: number}
+        result:
+          type: object
+          nullable: true
+          description: Null until a valid run has completed and settings restoration succeeded. Review before saving.
+          properties:
+            pitcher: {type: string, enum: [small, medium, large]}
+            pitcherGrams: {type: number}
+            milkGrams: {type: number}
+            flow: {type: number}
+            seconds: {type: number}
 
     MachineSnapshot:
       type: object
