@@ -19,7 +19,7 @@ globalThis.createPlugin = function createPlugin() {
       const methods = { status: 'GET', calculate: 'POST', validate: 'POST', ui: 'GET' };
       if (!methods[endpoint]) return json(404, { code: 'not_found', message: 'Unknown endpoint.' });
       if (method !== methods[endpoint]) return json(405, { code: 'method_not_allowed', message: `Use ${methods[endpoint]}.` });
-      if (endpoint === 'status') return json(200, { apiVersion: 1, version: MANIFEST.version, ready: validateSettings(settings).length === 0, settings, errors: validateSettings(settings), schema: MANIFEST.settings });
+      if (endpoint === 'status') return json(200, { apiVersion: 2, version: MANIFEST.version, ready: validateSettings(settings).length === 0, settings, errors: validateSettings(settings), schema: MANIFEST.settings });
       if (endpoint === 'ui') return { status: 200, headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' }, body: settingsPage() };
       if (endpoint === 'validate') {
         if (!body || typeof body !== 'object' || Array.isArray(body)) return json(400, { code: 'invalid_request', message: 'Settings must be an object.' });

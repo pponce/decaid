@@ -80,7 +80,7 @@ void main() {
     expect(body['durationSeconds'], 30);
     expect(body['jug'], 'small');
     expect(body['workflowPatch'], {
-      'steamSettings': {'duration': 30},
+      'steamSettings': {'duration': 30, 'flow': 1.5, 'targetTemperature': 150},
     });
     final invalid = await invoke(
       manager,

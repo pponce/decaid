@@ -27,7 +27,7 @@ test('built plugin runs without DOM, timers, network or other host capabilities'
   assert.equal(instance.id, manifest.id);
   const status = call(instance, 'status');
   assert.equal(status.json.ready, true);
-  assert.equal(status.json.apiVersion, 1);
+  assert.equal(status.json.apiVersion, 2);
 });
 
 test('fresh installs expose configuration requirements, never invented working values', () => {
@@ -37,14 +37,14 @@ test('fresh installs expose configuration requirements, never invented working v
   assert.ok(status.json.errors.length > 0);
 });
 
-test('calculate endpoint returns duration-only patch and calibration revision', () => {
+test('calculate endpoint returns calibration flow, heater and duration patch and calibration revision', () => {
   const response = call(plugin(), 'calculate', 'POST', {
     samples: [800, 400, 0].map(ageMs => ({ weightGrams: 330, ageMs })),
     jug: 'auto', machineState: 'idle', steamFlow: 1.5, steamTemperature: 150, stopAtTemperature: 0,
   });
   assert.equal(response.status, 200);
   assert.equal(response.json.durationSeconds, 30);
-  assert.deepEqual(response.json.workflowPatch, { steamSettings: { duration: 30 } });
+  assert.deepEqual(response.json.workflowPatch, { steamSettings: { duration: 30, flow: 1.5, targetTemperature: 150 } });
   assert.equal(JSON.parse(response.json.calibrationRevision).referenceSeconds, 25);
 });
 

@@ -1,4 +1,4 @@
-# Calibrated Steam Timer
+# Auto Steam Calculator
 
 This bundled, opt-in plugin estimates steam duration from a known milk-weight/time
 calibration. It does not measure milk temperature. Decaid owns the plugin and its
@@ -7,32 +7,43 @@ to apply the duration. DYE2 is neither required nor modified.
 
 ## Setup and use
 
-1. Enable **Calibrated Steam Timer** in Decaid's plugin settings.
-2. Open its settings UI. Supporting skins can link to
-   `/api/v1/plugins/calibrated-steam.reaplugin/ui` on Decaid's API server.
-3. Weigh and record each empty jug: small, medium and large.
-4. Record your normal milk weight for one drink and whether that drink normally
-   uses the small or medium jug. These values select the detection thresholds.
-5. Perform a calibration run: record milk-only weight, actual steaming time until
-   your preferred milk temperature, steam flow and steam heater temperature.
-   Use similar initial milk temperature, milk type and technique subsequently.
-6. Set a maximum calculated duration. Results exceeding it are rejected, not
-   silently shortened. The supported upper limit is 255 seconds.
-7. In a supporting skin, place the filled jug on the connected scale, choose
-   **Auto Calc**, check the estimated jug and milk weight, then choose **Use time**.
-   Keep the jug on the scale until the setting has been applied. Starting steam is
-   still a separate action. The machine's duration setting performs the stop.
+In Streamline, open **Settings > Extensions > Auto Steam Calculator**. Enable the
+extension there, then save the calibration in its embedded settings form. The
+same form is served at `/api/v1/plugins/calibrated-steam.reaplugin/ui` when loaded;
+other skins can provide their own plugin enable control and embed it.
+
+1. Enter the empty Small, Medium and Large jug weights.
+2. Choose a starting jug selection: Small, Medium, Large or Auto. Auto reveals
+   usual milk per drink and the Small/Medium jug normally used for one drink.
+   Streamline remembers subsequent preset choices separately.
+3. Using manual steam mode, steam a known milk-only weight to your preferred
+   temperature and record the time, flow and heater target used. Enter these as
+   the calibration. The usual milk per drink can differ from calibration mass.
+4. Save. Use similar milk, starting temperature and technique on later runs.
+
+Streamline shows **Auto | F | T**, with the active mode blue. Tap the Steam heading
+or mode label to cycle. In Auto, the usual preset row becomes **S / M / L / Auto**.
+Place the filled jug on the scale and tap a preset to calculate and apply. Tapping
+an already-selected preset recalculates; no preview dialog or Use time button is
+involved. Success shows jug, milk mass and seconds; start steam normally afterward.
+
+Auto applies the calibration flow and, when calculating, the calibration heater
+target. Entering Auto, finishing a steam cycle, reloading an active session, or
+returning to it after settings/focus refresh resets to **Off** until the next
+calculation. Off means duration 0 and heater target 0, matching Streamline's manual
+Off behavior. It is a reminder rather than a hardware start interlock: a physical
+start may still produce a brief steam burst. Resets wait until the machine is idle.
+
+The skin saves the previous manual duration, flow, heater target and probe-stop
+setting before entering Auto and restores them on exit or plugin disable. A disable
+during steaming defers restoration until idle. Auto values do not replace manual
+preferences or profile values. While Auto is active, use jug presets to set the
+time; manual number editors and plus/minus are inactive.
 
 **Gross** means jug plus milk: start with the empty scale at zero and do not tare
 the jug. **Tared** means milk only: no jug weight is subtracted and automatic jug
 identification is unavailable. The software cannot detect a physical tare button
-press, so the selected mode must match what the scale displays.
-
-Steam flow and heater target must match the calibration. The plugin will not
-silently change them, compensate for a different flow, enable a disabled heater,
-or disable a milk-probe stop. Disable probe-based stopping explicitly before
-using the calibrated timer. A heater parked by Eco Steam must be restored to the
-calibration target first.
+press; the selected mode must match the scale display.
 
 ## Attribution and calculation
 
@@ -69,7 +80,7 @@ proof that the plugin is running. Restore the skin's usual steam UI if disabled.
 | GET | `status` | API version, readiness, current settings, validation errors and setting schema |
 | GET | `ui` | Standalone calibration settings form; can be embedded in an iframe |
 | POST | `validate` | Validate a complete settings object without storing it |
-| POST | `calculate` | Return a calculation and duration-only workflow patch; performs no write |
+| POST | `calculate` | Return a calculation and duration, flow and heater workflow patch; performs no write |
 
 Prefix endpoints with `/api/v1/plugins/calibrated-steam.reaplugin/`.
 Settings are persisted through the existing
@@ -108,30 +119,36 @@ With a 150 g small jug and a 150 g / 25 s calibration, the example returns
 `durationSeconds: 30`, and:
 
 ```json
-{"steamSettings": {"duration": 30}}
+{"steamSettings": {"duration": 30, "flow": 1.5, "targetTemperature": 150}}
 ```
 
-The response also contains `scaleGrams`, `jugGrams`, `apiVersion: 1` and an opaque
+The response also contains `scaleGrams`, `jugGrams`, `apiVersion: 2` and an opaque
 `calibrationRevision`. Do not parse the revision: compare it to invalidate a
 preview when the settings change. `jugSource` is `heuristic`, `manual` or `tared`.
 In tared auto mode `jug` is null; skins must not present a guessed container.
 
-Before applying, obtain a fresh workflow and machine state, recalculate with fresh
-scale samples and reject a changed calibration, jug, weight, workflow or result.
-Do not write while the machine is busy or disconnected. Apply only the duration
-through `PUT /api/v1/workflow`, using the skin's normal persistence and error
-handling. Do not restore an unrelated remembered heater target. Never start steam
-or run the stop countdown in a WebView. Do not show success until the workflow
-write succeeds; transport failures can still leave the final state uncertain.
-Calculation and application are separate operations, not an atomic machine lock.
+The calculator contract is version 2 (plugin manifest apiVersion remains the
+Decaid host contract version 1). Earlier draft clients expecting a duration-only
+patch must update. Check status.apiVersion before activating a client.
 
-Streamline expires previews after 15 seconds, rejects slow calculation responses
-when observations expire, and remembers a duration only after a successful
-workflow write. Other skins should also avoid queuing a failed calculation for
-later replay.
+Before applying, obtain fresh workflow and machine state and recalculate with
+fresh scale samples. Reject changed observations or calibration. Apply the returned
+three fields together through `PUT /api/v1/workflow`; never start steam or run the
+stop countdown in a WebView. The supplied heater target may be 0 (Off); a different
+enabled target must match calibration. Current flow may differ because the
+returned flow is applied. Probe stopping must be zero when calculating. Streamline
+captures its prior value and explicitly clears it on Auto entry.
+
+Skins own Auto-session transitions. Capture and persist the manual settings before
+writing Off, keep them through reloads and failed writes, and restore them before
+releasing Auto ownership. Suppress normal manual-setting reconciliation while
+Auto owns the steam settings, including reconciliation already waiting on a read.
+Never queue a failed calculation for later replay or claim success before the
+workflow write succeeds. A lost response can leave the final state uncertain.
+Separate calculation and application calls are not an atomic machine lock.
 
 HTTP 422 carries `{code, message}` for configuration, scale readiness, invalid
-milk mass, duration limits, non-idle machine, active probe stop or calibration
+milk mass, duration limits, non-idle machine, active probe stop or heater
 mismatch. An unloaded plugin is rejected by Decaid with 404 before dispatch.
 Handle unavailable plugins and API failures without applying a cached result.
 
@@ -179,11 +196,12 @@ Disable the plugin through its `/disable` endpoint and confirm `/calculate`
 returns 404; restart and confirm it stays disabled. Inspect
 `scripts/sb-dev.sh logs -n 30 --filter error`, then `scripts/sb-dev.sh stop`.
 
-On the tablet with the companion Streamline skin, verify light/dark appearance,
-touch and keyboard dismissal, Auto Calc enable/disable, configuration save and
-reload, gross/tared modes and manual jug overrides. Removing or disconnecting the
-scale, changing flow or heater target, arming probe stopping, starting another
-machine operation, or disabling the plugin between preview and apply must prevent
-application. Verify a rejected network write is not shown as success or saved
-for later replay. Finally calibrate and validate timed stopping on real hardware
-with a thermometer; a simulator cannot establish temperature accuracy.
+On the tablet, verify the 114 px mode label and four preset touch targets in
+light/dark mode; heading and label cycling; direct Settings > Extensions access
+before and after visiting a legacy settings page; enable/disable; gross/tared
+weighing; repeated taps on the same jug; and persistence across reloads. Verify
+entry and post-steam Off, automatic calibration-flow application, manual-setting
+restoration and a deferred disable while steaming. A failed scale/calibration
+check must leave Auto Off, and a failed write must not be reported as success.
+Validate actual stopping temperature with a thermometer; simulated tests cannot
+establish thermal accuracy or the length of a physical-start burst in Off.

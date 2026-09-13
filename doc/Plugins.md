@@ -1126,7 +1126,7 @@ it in Decaid UI.
 
 ## External First-Party Plugins
 
-The opt-in [Calibrated Steam Timer](CalibratedSteam.md) is maintained directly in
+The opt-in [Auto Steam Calculator](CalibratedSteam.md) is maintained directly in
 Decaid at `packages/calibrated-steam/`, with generated output committed in
 `assets/plugins/calibrated-steam.reaplugin/`. It is bundled and disabled by default;
 it has no separate plugin repository or release download. Its portable calculation

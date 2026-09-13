@@ -1,9 +1,9 @@
 {
   "id": "calibrated-steam.reaplugin",
-  "name": "Calibrated Steam Timer",
+  "name": "Auto Steam Calculator",
   "author": "pponce; calculation and jug heuristic inspired by Damian / Damian-AU (DSx2)",
   "description": "Estimate steam duration from milk weight using your calibration. Inspired by Damian's DSx2 calculator. This estimates temperature through time; it does not measure milk temperature.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "apiVersion": 1,
   "permissions": [
     "api"
@@ -29,8 +29,8 @@
     },
     "singleDrinkGrams": {
       "type": "number",
-      "label": "Milk for one drink (g)",
-      "description": "Your usual milk amount for one drink; used in Damian's automatic jug-selection heuristic.",
+      "label": "Usual milk per drink (g)",
+      "description": "Milk only for one drink; used to infer jug size in Auto. This can differ from your calibration milk weight.",
       "default": 160
     },
     "singleDrinkJug": {
@@ -67,14 +67,14 @@
     },
     "referenceFlow": {
       "type": "number",
-      "label": "Calibration steam flow (ml/s)",
-      "description": "Machine steam flow setting used during calibration. The current flow must match.",
+      "label": "Auto steam flow (ml/s)",
+      "description": "Flow used for calibration and applied whenever Auto calculates a steam time.",
       "default": 0
     },
     "referenceSteamTemperature": {
       "type": "number",
       "label": "Calibration steam heater temperature (°C)",
-      "description": "Machine heater setpoint used during calibration, 135–165 °C. This is not the milk temperature.",
+      "description": "Heater target used during calibration. Auto restores this target from Off when a time is calculated. This is not milk temperature.",
       "default": 0
     },
     "maxSeconds": {
@@ -82,6 +82,18 @@
       "label": "Maximum calculated duration (s)",
       "description": "Reject longer results rather than silently shortening them. Whole seconds, 1–255.",
       "default": 120
+    },
+    "defaultJug": {
+      "type": "enum",
+      "label": "Starting jug selection",
+      "description": "Small, Medium or Large subtracts that jug weight. Auto guesses the jug using milk per drink. Streamline remembers subsequent preset selections.",
+      "values": [
+        "small",
+        "medium",
+        "large",
+        "auto"
+      ],
+      "default": "auto"
     }
   },
   "api": [

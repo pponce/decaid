@@ -24,6 +24,7 @@ export function validateSettings(settings) {
   }
   if (!['gross', 'tared'].includes(settings.weightMode)) errors.push({ field: 'weightMode', message: 'Choose gross or tared scale weight.' });
   if (!['small', 'medium'].includes(settings.singleDrinkJug)) errors.push({ field: 'singleDrinkJug', message: 'Choose the small or medium jug for one drink.' });
+  if (settings.defaultJug !== undefined && !['small', 'medium', 'large', 'auto'].includes(settings.defaultJug)) errors.push({ field: 'defaultJug', message: 'Choose Small, Medium, Large or Auto.' });
   return errors;
 }
 
@@ -65,8 +66,8 @@ export function calculate(settings, input) {
   if (input.machineState !== 'idle') fail('machine_not_idle', 'Wait until the machine is idle before setting a steam time.');
   if (!Number.isFinite(input.stopAtTemperature) || input.stopAtTemperature !== 0) fail('probe_stop_active', 'Turn off milk-probe stopping before using the calibrated timer.');
   if (!Number.isFinite(input.steamFlow) || !Number.isFinite(input.steamTemperature) ||
-      Math.abs(input.steamFlow - settings.referenceFlow) > 0.001 || input.steamTemperature !== settings.referenceSteamTemperature) {
-    fail('calibration_mismatch', `Calibration requires steam flow ${settings.referenceFlow} ml/s and heater temperature ${settings.referenceSteamTemperature} °C. Restore these settings or recalibrate.`);
+      (input.steamTemperature !== 0 && input.steamTemperature !== settings.referenceSteamTemperature)) {
+    fail('calibration_mismatch', `Calibration requires heater temperature ${settings.referenceSteamTemperature} °C. Restore this setting or recalibrate.`);
   }
   const scaleGrams = stableWeight(input.samples);
   const tared = settings.weightMode === 'tared';
@@ -77,8 +78,8 @@ export function calculate(settings, input) {
   const durationSeconds = Math.round(settings.referenceSeconds * milkGrams / settings.referenceMilkGrams);
   if (durationSeconds < 1 || durationSeconds > settings.maxSeconds || durationSeconds > 255) fail('duration_out_of_range', `Calculated time ${durationSeconds}s is outside 1–${settings.maxSeconds}s. Check the calibration and milk amount.`);
   return {
-    apiVersion: 1, jug, jugSource: tared ? 'tared' : (choice === 'auto' ? 'heuristic' : 'manual'),
+    apiVersion: 2, jug, jugSource: tared ? 'tared' : (choice === 'auto' ? 'heuristic' : 'manual'),
     scaleGrams, jugGrams, milkGrams, durationSeconds,
-    workflowPatch: { steamSettings: { duration: durationSeconds } },
+    workflowPatch: { steamSettings: { duration: durationSeconds, flow: settings.referenceFlow, targetTemperature: settings.referenceSteamTemperature } },
   };
 }

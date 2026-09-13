@@ -1,4 +1,4 @@
-# Calibrated Steam Timer source
+# Auto Steam Calculator source
 
 This plugin is maintained and bundled inside Decaid. See
 [the user and skin-developer guide](../../doc/CalibratedSteam.md).

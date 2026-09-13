@@ -1,5 +1,7 @@
 # Calibrated steam extension
 
+This initial dialog design is superseded by [the preset interaction](preset-design.md).
+
 Implement a portable JavaScript plugin under `packages/calibrated-steam`, with an
 installable `assets/plugins/calibrated-steam.reaplugin` directory. It is bundled
 into Decaid but disabled by default until the user enables it. A separate

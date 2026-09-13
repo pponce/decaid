@@ -22,7 +22,7 @@ test('calibrated ratio subtracts jug weight and rounds to whole seconds', () => 
   assert.equal(result.jug, 'small');
   assert.equal(result.milkGrams, 180);
   assert.equal(result.durationSeconds, 30);
-  assert.deepEqual(result.workflowPatch, { steamSettings: { duration: 30 } });
+  assert.deepEqual(result.workflowPatch, { steamSettings: { duration: 30, flow: 1.5, targetTemperature: 150 } });
 });
 
 test('Damian small-single heuristic uses strict > at both boundaries', () => {
@@ -85,8 +85,9 @@ test('refuses nonpositive milk, excessive milk and duration beyond the configure
   throwsCode(() => calculate({ ...settings, maxSeconds: 20 }, request(330)), 'duration_out_of_range');
 });
 
-test('flow, heater temperature and probe stop must agree with timed calibration', () => {
-  throwsCode(() => calculate(settings, request(330, { steamFlow: 1 })), 'calibration_mismatch');
+test('calculator supplies calibration flow and restores the heater from Off', () => {
+  assert.equal(calculate(settings, request(330, { steamFlow: 1 })).workflowPatch.steamSettings.flow, 1.5);
+  assert.equal(calculate(settings, request(330, { steamTemperature: 0 })).workflowPatch.steamSettings.targetTemperature, 150);
   throwsCode(() => calculate(settings, request(330, { steamTemperature: 140 })), 'calibration_mismatch');
   throwsCode(() => calculate(settings, request(330, { stopAtTemperature: 60 })), 'probe_stop_active');
   throwsCode(() => calculate(settings, request(330, { steamFlow: null })), 'calibration_mismatch');
