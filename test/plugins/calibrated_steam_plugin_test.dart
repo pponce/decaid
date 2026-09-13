@@ -20,6 +20,7 @@ void main() {
         as Map<String, dynamic>,
   );
   const settings = <String, dynamic>{
+    'autoDetect': true,
     'smallJugGrams': 150,
     'mediumJugGrams': 220,
     'largeJugGrams': 300,

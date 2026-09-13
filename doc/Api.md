@@ -731,11 +731,16 @@ See [`assets/api/websocket_v1.yml`](../assets/api/websocket_v1.yml) for the full
 Bundled but disabled by default. Once enabled, its `GET status`, `GET ui`,
 `POST validate` and `POST calculate` endpoints are available below
 `/api/v1/plugins/calibrated-steam.reaplugin/`. It estimates a duration using saved
-milk-weight/time calibration and Damian's DSx2 jug-selection heuristic. Calculation
+milk-weight/time calibration and Damian's DSx2 pitcher-selection heuristic. Calculation
 does not control the machine: a skin revalidates the result and applies
 duration, calibration flow and heater target through `PUT /api/v1/workflow`. See
 [Auto Steam Calculator](CalibratedSteam.md) for configuration, request/response
 examples and the skin developer contract. No DYE2 dependency is required.
+
+Auto Steam Calculator v0.3.0 status includes `availablePitchers`. Skins render only
+those choices and require `ready` before calculating. The standalone `ui` accepts
+`returnTo` for returning to the calling skin's settings after save or cancellation.
+See [CalibratedSteam.md](CalibratedSteam.md) for setup rules and compatibility keys.
 
 ### Settings Plugin (`settings.reaplugin`)
 

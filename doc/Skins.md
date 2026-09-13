@@ -1372,13 +1372,16 @@ DELETE /api/v1/store/{namespace}/{key}
 ### Plugins API
 
 The bundled [Auto Steam Calculator](CalibratedSteam.md#skin-developer-contract)
-provides milk-weight/time calibration and automatic jug selection inspired by
+provides milk-weight/time calibration and automatic pitcher selection inspired by
 Damian's DSx2. Supporting skins discover the loaded plugin, collect fresh scale
-observations through their existing connection, offer a jug choice, then recheck
+observations through their existing connection, offer a pitcher choice, then recheck
 before applying duration, calibration flow and heater target through the workflow
 API. The plugin
 owns the calculation and settings; skins do not need to copy either. Streamline's
-companion integration adds Auto to the steam mode cycle and uses jug presets for direct calculation.
+companion integration adds Auto to the steam mode cycle and uses pitcher presets for direct calculation.
+Render `status.availablePitchers` and gate calculations on `ready`. Open the standalone
+settings form with a `returnTo` URL so Return to settings and successful Save return
+to the calling skin; see the calculator guide for validation and host restrictions.
 
 Query loaded plugins and their settings.
 

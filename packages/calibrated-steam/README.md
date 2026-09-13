@@ -8,6 +8,6 @@ Run `npm test` in this directory for the JavaScript suite. No npm install is
 needed. Source lives in `src/`, and the committed build output lives in
 `../../assets/plugins/calibrated-steam.reaplugin/`.
 
-The formula and automatic jug-selection heuristic are inspired by
+The formula and automatic pitcher-selection heuristic are inspired by
 [Damian / Damian-AU's DSx2](https://github.com/Damian-AU/DSx2). The new JavaScript
 implementation is licensed under Decaid's GPL-3.0-only license.

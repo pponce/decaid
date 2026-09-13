@@ -1,10 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { calculate, validateSettings } from '../src/core.mjs';
+import { calculate, validateSettings, availablePitchers } from '../src/core.mjs';
 
 export const settings = {
   smallJugGrams: 150, mediumJugGrams: 220, largeJugGrams: 300,
-  singleDrinkGrams: 160, singleDrinkJug: 'small', weightMode: 'gross',
+  autoDetect: true, singleDrinkGrams: 160, singleDrinkJug: 'small', weightMode: 'gross',
   referenceMilkGrams: 150, referenceSeconds: 25,
   referenceFlow: 1.5, referenceSteamTemperature: 150, maxSeconds: 120,
 };
@@ -44,11 +44,11 @@ test('manual jug override corrects an inference', () => {
 });
 
 test('tared mode never subtracts a jug or pretends to infer its size', () => {
-  const result = calculate({ ...settings, weightMode: 'tared' }, request(180));
+  const result = calculate({ ...settings, autoDetect: false, weightMode: 'tared' }, request(180, { jug: 'small' }));
   assert.equal(result.durationSeconds, 30);
-  assert.equal(result.jug, null);
+  assert.equal(result.jug, 'small');
   assert.equal(result.jugSource, 'tared');
-  assert.equal(calculate({ ...settings, weightMode: 'tared' }, request(180, { jug: 'large' })).milkGrams, 180);
+  assert.equal(calculate({ ...settings, autoDetect: false, weightMode: 'tared' }, request(180, { jug: 'large' })).milkGrams, 180);
 });
 
 test('stable readings use the median instead of a single outlying final digit', () => {
@@ -102,4 +102,39 @@ test('only an idle machine can accept a calculated timer', () => {
 test('bad request shapes and unknown jug values fail without producing a duration', () => {
   throwsCode(() => calculate(settings, null), 'invalid_request');
   throwsCode(() => calculate(settings, request(330, { jug: 'huge' })), 'invalid_request');
+});
+
+
+test('one configured pitcher is sufficient without automatic detection', () => {
+  const partial = { ...settings, autoDetect: false, defaultJug: 'medium', smallJugGrams: 0, largeJugGrams: 0, singleDrinkGrams: 0, singleDrinkJug: '' };
+  assert.deepEqual(validateSettings(partial), []);
+  assert.deepEqual(availablePitchers(partial), ['medium']);
+  assert.equal(calculate(partial, request(400, { jug: 'medium' })).milkGrams, 180);
+  throwsCode(() => calculate(partial, request(400, { jug: 'small' })), 'pitcher_not_configured');
+  throwsCode(() => calculate(partial, request(400)), 'pitcher_not_configured');
+});
+
+test('saving requires a pitcher and a configured starting choice', () => {
+  assert.ok(validateSettings({ ...settings, autoDetect: false, smallJugGrams: 0, mediumJugGrams: 0, largeJugGrams: 0 }).some(e => e.field === 'pitchers'));
+  assert.ok(validateSettings({ ...settings, autoDetect: false, defaultJug: 'large', largeJugGrams: 0 }).some(e => e.field === 'defaultJug'));
+  assert.ok(validateSettings({ ...settings, autoDetect: false, defaultJug: 'auto' }).some(e => e.field === 'defaultJug'));
+});
+
+test('automatic detection is explicit and requires its inputs and all heuristic weights', () => {
+  assert.deepEqual(availablePitchers(settings), ['small', 'medium', 'large', 'auto']);
+  for (const invalid of [{ autoDetect: false }, { singleDrinkGrams: 0 }, { singleDrinkJug: '' }, { mediumJugGrams: 0 }, { weightMode: 'tared' }]) {
+    assert.ok(!availablePitchers({ ...settings, ...invalid }).includes('auto'));
+    if (invalid.autoDetect !== false) assert.ok(validateSettings({ ...settings, ...invalid }).length);
+  }
+});
+
+
+test('calibration flow accepts 0.4 through 2.5 ml/s, including both endpoints', () => {
+  for (const referenceFlow of [0.4, 1.5, 2.5]) {
+    assert.deepEqual(validateSettings({ ...settings, referenceFlow }), []);
+    assert.equal(calculate({ ...settings, referenceFlow }, request(330)).workflowPatch.steamSettings.flow, referenceFlow);
+  }
+  for (const referenceFlow of [0, 0.3, 2.6]) {
+    assert.ok(validateSettings({ ...settings, referenceFlow }).some(error => error.field === 'referenceFlow'));
+  }
 });

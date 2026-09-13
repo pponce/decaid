@@ -3092,11 +3092,15 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [apiVersion, version, ready, settings, errors, schema]
+                required: [apiVersion, version, ready, availablePitchers, settings, errors, schema]
                 properties:
                   apiVersion: {type: integer, enum: [2]}
                   version: {type: string}
                   ready: {type: boolean}
+                  availablePitchers:
+                    type: array
+                    description: Configured pitcher choices. Auto appears only when explicitly enabled with valid detection settings; check ready before calculating.
+                    items: {type: string, enum: [small, medium, large, auto]}
                   settings: {$ref: '#/components/schemas/PluginSettings'}
                   errors:
                     type: array
@@ -3111,6 +3115,12 @@ paths:
     get:
       summary: Open the calibrated steam settings form
       tags: [Plugins]
+      parameters:
+        - in: query
+          name: returnTo
+          required: false
+          schema: {type: string, format: uri}
+          description: Calling skin settings URL on the same host. Used by Return to settings and after a successful save; falls back to local Decaid settings.
       responses:
         "200":
           description: Standalone form suitable for embedding in a skin iframe
@@ -3192,7 +3202,7 @@ paths:
                       ageMs: {type: number, minimum: 0, maximum: 2500}
       responses:
         "200":
-          description: Estimated milk mass, inferred or selected jug, and duration
+          description: Estimated milk mass, inferred or selected pitcher, and duration
           content:
             application/json:
               schema:

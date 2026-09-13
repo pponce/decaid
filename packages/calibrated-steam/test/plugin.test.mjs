@@ -6,7 +6,7 @@ import vm from 'node:vm';
 const asset = new URL('../../../assets/plugins/calibrated-steam.reaplugin/', import.meta.url);
 const source = readFileSync(new URL('plugin.js', asset), 'utf8');
 const manifest = JSON.parse(readFileSync(new URL('manifest.json', asset), 'utf8'));
-const valid = { smallJugGrams: 150, mediumJugGrams: 220, largeJugGrams: 300, singleDrinkGrams: 160,
+const valid = { autoDetect: true, smallJugGrams: 150, mediumJugGrams: 220, largeJugGrams: 300, singleDrinkGrams: 160,
   singleDrinkJug: 'small', weightMode: 'gross', referenceMilkGrams: 150, referenceSeconds: 25,
   referenceFlow: 1.5, referenceSteamTemperature: 150, maxSeconds: 120 };
 function plugin(settings = valid) {
@@ -72,4 +72,20 @@ test('settings UI is self-contained and credits Damian', () => {
   assert.match(response.body, /form="settings"/);
   const script = response.body.match(/<script>([\s\S]*)<\/script>/)[1];
   assert.doesNotThrow(() => new vm.Script(script));
+});
+
+
+test('status advertises only configured pitcher choices and Auto is opt-in', () => {
+  const fresh = call(plugin({}), 'status').json;
+  assert.deepEqual(fresh.availablePitchers, []);
+  assert.equal(fresh.settings.autoDetect, false);
+  assert.equal(fresh.settings.singleDrinkGrams, 0);
+  const partial = call(plugin({ ...valid, autoDetect: false, smallJugGrams: 0, largeJugGrams: 0, defaultJug: 'medium', singleDrinkGrams: 0 }), 'status').json;
+  assert.equal(partial.ready, true);
+  assert.deepEqual(partial.availablePitchers, ['medium']);
+});
+
+
+test('fresh and previously unset calibration flow default to 0.4 ml/s', () => {
+  for (const values of [{}, { referenceFlow: 0 }]) assert.equal(call(plugin(values), 'status').json.settings.referenceFlow, 0.4);
 });

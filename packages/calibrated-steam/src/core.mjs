@@ -5,26 +5,53 @@ export class CalculationError extends Error {
   }
 }
 
+export function configuredPitchers(settings) {
+  return ['small', 'medium', 'large'].filter(size => {
+    const weight = settings[`${size}JugGrams`];
+    return Number.isFinite(weight) && weight >= 1 && weight <= 3000;
+  });
+}
+
+export function availablePitchers(settings) {
+  const choices = configuredPitchers(settings);
+  if (settings.autoDetect === true && settings.weightMode === 'gross' && choices.length === 3 &&
+      Number.isFinite(settings.singleDrinkGrams) && settings.singleDrinkGrams >= 10 && settings.singleDrinkGrams <= 1000 &&
+      ['small', 'medium'].includes(settings.singleDrinkJug)) choices.push('auto');
+  return choices;
+}
+
 export function validateSettings(settings) {
   const errors = [];
+  const names = {
+    referenceMilkGrams: 'Calibration milk weight', referenceSeconds: 'Calibration time',
+    referenceFlow: 'Calibration flow', referenceSteamTemperature: 'Steam heater temperature',
+    maxSeconds: 'Maximum duration', singleDrinkGrams: 'Usual milk per drink',
+    smallJugGrams: 'Small pitcher weight', mediumJugGrams: 'Medium pitcher weight', largeJugGrams: 'Large pitcher weight',
+  };
   const range = (key, minimum, maximum, integer = false) => {
     const value = settings[key];
     if (!Number.isFinite(value) || value < minimum || value > maximum || (integer && !Number.isInteger(value))) {
-      errors.push({ field: key, message: `${key} must be ${integer ? 'a whole number ' : ''}between ${minimum} and ${maximum}.` });
+      errors.push({ field: key, message: `${names[key]} must be ${integer ? 'a whole number ' : ''}between ${minimum} and ${maximum}.` });
     }
   };
   range('referenceMilkGrams', 10, 1500);
   range('referenceSeconds', 1, 255);
-  range('referenceFlow', 0.1, 2.5);
+  range('referenceFlow', 0.4, 2.5);
   range('referenceSteamTemperature', 135, 165, true);
   range('maxSeconds', 1, 255, true);
-  range('singleDrinkGrams', 10, 1000);
-  for (const key of ['smallJugGrams', 'mediumJugGrams', 'largeJugGrams']) {
-    range(key, settings.weightMode === 'tared' ? 0 : 1, 3000);
-  }
+  for (const key of ['smallJugGrams', 'mediumJugGrams', 'largeJugGrams']) range(key, settings[key] === 0 ? 0 : 1, 3000);
+  if (!configuredPitchers(settings).length) errors.push({ field: 'pitchers', message: 'Enter at least one empty pitcher weight (1–3000 g).' });
   if (!['gross', 'tared'].includes(settings.weightMode)) errors.push({ field: 'weightMode', message: 'Choose gross or tared scale weight.' });
-  if (!['small', 'medium'].includes(settings.singleDrinkJug)) errors.push({ field: 'singleDrinkJug', message: 'Choose the small or medium jug for one drink.' });
-  if (settings.defaultJug !== undefined && !['small', 'medium', 'large', 'auto'].includes(settings.defaultJug)) errors.push({ field: 'defaultJug', message: 'Choose Small, Medium, Large or Auto.' });
+  if (typeof settings.autoDetect !== 'boolean') errors.push({ field: 'autoDetect', message: 'Choose whether to offer automatic pitcher detection.' });
+  if (settings.autoDetect === true) {
+    range('singleDrinkGrams', 10, 1000);
+    if (!['small', 'medium'].includes(settings.singleDrinkJug)) errors.push({ field: 'singleDrinkJug', message: 'Choose the small or medium pitcher normally used for one drink.' });
+    if (configuredPitchers(settings).length !== 3) errors.push({ field: 'pitchers', message: 'Automatic detection requires all three pitcher weights for Damian’s detection thresholds.' });
+    if (settings.weightMode !== 'gross') errors.push({ field: 'weightMode', message: 'Automatic pitcher detection requires gross weight (pitcher plus milk).' });
+  }
+  if (settings.defaultJug !== undefined && configuredPitchers(settings).length && !availablePitchers(settings).includes(settings.defaultJug)) {
+    errors.push({ field: 'defaultJug', message: 'Choose a configured starting pitcher selection.' });
+  }
   return errors;
 }
 
@@ -33,7 +60,7 @@ function fail(code, message) {
 }
 
 function stableWeight(samples) {
-  const message = 'Place the filled jug on the scale and wait for a fresh, stable reading.';
+  const message = 'Place the filled pitcher on the scale and wait for a fresh, stable reading.';
   if (!Array.isArray(samples) || samples.length < 3 || samples.length > 64) fail('scale_not_ready', message);
   for (let index = 0; index < samples.length; index++) {
     const sample = samples[index];
@@ -62,7 +89,8 @@ export function calculate(settings, input) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) fail('invalid_request', 'A calculation request is required.');
   if (validateSettings(settings).length) fail('configuration_required', 'Complete the calibration settings before calculating.');
   const choice = input.jug ?? 'auto';
-  if (!['auto', 'small', 'medium', 'large'].includes(choice)) fail('invalid_request', 'Choose Auto, Small, Medium or Large jug.');
+  if (!['auto', 'small', 'medium', 'large'].includes(choice)) fail('invalid_request', 'Choose Auto, Small, Medium or Large pitcher.');
+  if (!availablePitchers(settings).includes(choice)) fail('pitcher_not_configured', 'Configure this pitcher selection in Settings before calculating.');
   if (input.machineState !== 'idle') fail('machine_not_idle', 'Wait until the machine is idle before setting a steam time.');
   if (!Number.isFinite(input.stopAtTemperature) || input.stopAtTemperature !== 0) fail('probe_stop_active', 'Turn off milk-probe stopping before using the calibrated timer.');
   if (!Number.isFinite(input.steamFlow) || !Number.isFinite(input.steamTemperature) ||
@@ -74,7 +102,7 @@ export function calculate(settings, input) {
   const jug = choice !== 'auto' ? choice : (tared ? null : inferredJug(settings, scaleGrams));
   const jugGrams = tared ? 0 : settings[`${jug}JugGrams`];
   const milkGrams = Math.round((scaleGrams - jugGrams) * 10) / 10;
-  if (milkGrams < 10 || milkGrams > 1500) fail('invalid_milk_weight', 'Calculated milk weight must be 10–1500 g. Check the jug choice and whether the scale was tared.');
+  if (milkGrams < 10 || milkGrams > 1500) fail('invalid_milk_weight', 'Calculated milk weight must be 10–1500 g. Check the pitcher choice and whether the scale was tared.');
   const durationSeconds = Math.round(settings.referenceSeconds * milkGrams / settings.referenceMilkGrams);
   if (durationSeconds < 1 || durationSeconds > settings.maxSeconds || durationSeconds > 255) fail('duration_out_of_range', `Calculated time ${durationSeconds}s is outside 1–${settings.maxSeconds}s. Check the calibration and milk amount.`);
   return {
