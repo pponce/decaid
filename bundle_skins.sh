@@ -92,7 +92,7 @@ for ((i=0; i<COUNT; i++)); do
     github_branch)
       BRANCH=$(jq -r ".[$i].branch // \"main\"" "$CONFIG")
       URL="https://github.com/$REPO/archive/refs/heads/$BRANCH.zip"
-      SKIN_ID="${REPO_NAME}-${BRANCH}"
+      SKIN_ID=$(printf '%s' "${REPO_NAME}-${BRANCH}" | tr '/' '-')
       CACHE_FILE="$CACHE_DIR/${SKIN_ID}.zip"
 
       if [ -f "$CACHE_FILE" ]; then
