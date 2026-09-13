@@ -3078,6 +3078,163 @@ paths:
                   id:
                     type: string
 
+  /api/v1/plugins/calibrated-steam.reaplugin/status:
+    get:
+      summary: Read calibrated steam readiness and settings
+      tags: [Plugins]
+      description: >
+        Available only when the bundled opt-in plugin is loaded. Settings are
+        stored with the existing plugin settings API. See doc/CalibratedSteam.md.
+      responses:
+        "200":
+          description: Readiness, saved calibration and manifest setting schema
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [apiVersion, version, ready, settings, errors, schema]
+                properties:
+                  apiVersion: {type: integer, enum: [1]}
+                  version: {type: string}
+                  ready: {type: boolean}
+                  settings: {$ref: '#/components/schemas/PluginSettings'}
+                  errors:
+                    type: array
+                    items: {$ref: '#/components/schemas/CalibratedSteamSettingError'}
+                  schema:
+                    type: object
+                    additionalProperties: {$ref: '#/components/schemas/PluginSettingSchema'}
+        "404":
+          description: Plugin is not loaded
+
+  /api/v1/plugins/calibrated-steam.reaplugin/ui:
+    get:
+      summary: Open the calibrated steam settings form
+      tags: [Plugins]
+      responses:
+        "200":
+          description: Standalone form suitable for embedding in a skin iframe
+          content:
+            text/html:
+              schema: {type: string}
+        "404":
+          description: Plugin is not loaded
+
+  /api/v1/plugins/calibrated-steam.reaplugin/validate:
+    post:
+      summary: Validate a complete calibration without storing it
+      tags: [Plugins]
+      description: >
+        Missing settings use manifest defaults. Supply the complete settings
+        object before saving through POST /api/v1/plugins/{id}/settings.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PluginSettings'}
+      responses:
+        "200":
+          description: Calibration is valid
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CalibratedSteamValidation'}
+        "422":
+          description: Calibration requires correction
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CalibratedSteamValidation'}
+        "400":
+          description: Request body is not a settings object
+        "404":
+          description: Plugin is not loaded
+
+  /api/v1/plugins/calibrated-steam.reaplugin/calculate:
+    post:
+      summary: Preview a calibrated milk steaming duration
+      tags: [Plugins]
+      description: >
+        Pure calculation using caller-provided observations; it never writes
+        settings or starts steam. The caller must revalidate live observations
+        before applying only duration through PUT /api/v1/workflow. Calculation
+        and application are not atomic. Calibration must be complete, the machine
+        idle, probe stopping disabled, and steam flow and heater target unchanged
+        from calibration. Sample ages cannot be authenticated by this endpoint.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [samples, machineState, steamFlow, steamTemperature, stopAtTemperature]
+              properties:
+                jug:
+                  type: string
+                  enum: [auto, small, medium, large]
+                  default: auto
+                machineState: {type: string, enum: [idle]}
+                steamFlow: {type: number, minimum: 0.1, maximum: 2.5}
+                steamTemperature: {type: integer, minimum: 135, maximum: 165}
+                stopAtTemperature: {type: number, enum: [0]}
+                samples:
+                  type: array
+                  minItems: 3
+                  maxItems: 64
+                  description: >
+                    Oldest first with strictly decreasing ages. Span at least
+                    500 ms, newest at most 1500 ms old, weight spread at most 2 g.
+                    Median weight is used; do not duplicate stale scale frames.
+                  items:
+                    type: object
+                    required: [weightGrams, ageMs]
+                    properties:
+                      weightGrams: {type: number}
+                      ageMs: {type: number, minimum: 0, maximum: 2500}
+      responses:
+        "200":
+          description: Estimated milk mass, inferred or selected jug, and duration
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [apiVersion, jug, jugSource, scaleGrams, jugGrams, milkGrams, durationSeconds, workflowPatch, calibrationRevision]
+                properties:
+                  apiVersion: {type: integer, enum: [1]}
+                  jug:
+                    type: string
+                    nullable: true
+                    enum: [small, medium, large, null]
+                  jugSource: {type: string, enum: [heuristic, manual, tared]}
+                  scaleGrams: {type: number}
+                  jugGrams: {type: number}
+                  milkGrams: {type: number, minimum: 10, maximum: 1500}
+                  durationSeconds: {type: integer, minimum: 1, maximum: 255}
+                  calibrationRevision:
+                    type: string
+                    description: Opaque token; a changed value invalidates a preview
+                  workflowPatch:
+                    type: object
+                    required: [steamSettings]
+                    additionalProperties: false
+                    properties:
+                      steamSettings:
+                        type: object
+                        required: [duration]
+                        additionalProperties: false
+                        properties:
+                          duration: {type: integer, minimum: 1, maximum: 255}
+        "422":
+          description: Invalid request, calibration, observations or operating conditions
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [code, message]
+                properties:
+                  code: {type: string}
+                  message: {type: string}
+        "404":
+          description: Plugin is not loaded
+
   /api/v1/plugins/{id}/{endpoint}:
     get:
       summary: Call a plugin HTTP endpoint
@@ -7178,6 +7335,22 @@ components:
           type: integer
           nullable: true
           description: Timer elapsed time in milliseconds. Null if scale doesn't support timers or timer hasn't been started.
+
+    CalibratedSteamSettingError:
+      type: object
+      required: [field, message]
+      properties:
+        field: {type: string}
+        message: {type: string}
+
+    CalibratedSteamValidation:
+      type: object
+      required: [valid, errors]
+      properties:
+        valid: {type: boolean}
+        errors:
+          type: array
+          items: {$ref: '#/components/schemas/CalibratedSteamSettingError'}
 
     PluginManifest:
       type: object

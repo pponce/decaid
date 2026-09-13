@@ -726,6 +726,17 @@ See [`assets/api/websocket_v1.yml`](../assets/api/websocket_v1.yml) for the full
 
 ## Bundled Plugins
 
+### Calibrated Steam Timer (`calibrated-steam.reaplugin`)
+
+Bundled but disabled by default. Once enabled, its `GET status`, `GET ui`,
+`POST validate` and `POST calculate` endpoints are available below
+`/api/v1/plugins/calibrated-steam.reaplugin/`. It estimates a duration using saved
+milk-weight/time calibration and Damian's DSx2 jug-selection heuristic. Calculation
+does not control the machine: a skin previews the result, revalidates it and applies
+only the duration through `PUT /api/v1/workflow`. See
+[Calibrated Steam Timer](CalibratedSteam.md) for configuration, request/response
+examples and the skin developer contract. No DYE2 dependency is required.
+
 ### Settings Plugin (`settings.reaplugin`)
 
 Built-in settings dashboard accessible at `/api/v1/plugins/settings.reaplugin/ui`. Provides a web-based interface for managing all app settings, skins, plugins, data, and more.

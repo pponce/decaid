@@ -1371,6 +1371,14 @@ DELETE /api/v1/store/{namespace}/{key}
 
 ### Plugins API
 
+The bundled [Calibrated Steam Timer](CalibratedSteam.md#skin-developer-contract)
+provides milk-weight/time calibration and automatic jug selection inspired by
+Damian's DSx2. Supporting skins discover the loaded plugin, collect fresh scale
+observations through their existing connection, show a preview with a jug override,
+then recheck before applying only the duration through the workflow API. The plugin
+owns the calculation and settings; skins do not need to copy either. Streamline's
+companion integration replaces its Time/Flow selector with Auto Calc while enabled.
+
 Query loaded plugins and their settings.
 
 #### List Loaded Plugins

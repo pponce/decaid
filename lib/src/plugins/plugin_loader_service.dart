@@ -977,6 +977,7 @@ class PluginLoaderService {
   Future<List<String>> _getBundledPluginPaths() async {
     return [
       'assets/plugins/time-to-ready.reaplugin',
+      'assets/plugins/calibrated-steam.reaplugin',
       'assets/plugins/visualizer.reaplugin',
       'assets/plugins/settings.reaplugin',
       'assets/plugins/dye2.reaplugin',
@@ -1057,9 +1058,10 @@ class PluginLoaderService {
 
         final autoLoadKey = 'plugin.autoload.${manifest.id}';
         if (!_prefs.containsKey(autoLoadKey)) {
-          await _prefs.setBool(autoLoadKey, true);
+          final enabled = manifest.id != 'calibrated-steam.reaplugin';
+          await _prefs.setBool(autoLoadKey, enabled);
           _log.info(
-            'Set auto-load enabled by default for bundled plugin: ${manifest.id}',
+            'Set default auto-load to $enabled for bundled plugin: ${manifest.id}',
           );
         }
       }

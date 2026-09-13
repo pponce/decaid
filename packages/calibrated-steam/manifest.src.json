@@ -1,0 +1,28 @@
+{
+  "id": "calibrated-steam.reaplugin",
+  "name": "Calibrated Steam Timer",
+  "author": "pponce; calculation and jug heuristic inspired by Damian / Damian-AU (DSx2)",
+  "description": "Estimate steam duration from milk weight using your calibration. Inspired by Damian's DSx2 calculator. This estimates temperature through time; it does not measure milk temperature.",
+  "version": "0.1.0",
+  "apiVersion": 1,
+  "permissions": ["api"],
+  "settings": {
+    "smallJugGrams": {"type":"number","label":"Small empty jug (g)","description":"Untared weight of the empty small jug.","default":0},
+    "mediumJugGrams": {"type":"number","label":"Medium empty jug (g)","description":"Untared weight of the empty medium jug.","default":0},
+    "largeJugGrams": {"type":"number","label":"Large empty jug (g)","description":"Untared weight of the empty large jug.","default":0},
+    "singleDrinkGrams": {"type":"number","label":"Milk for one drink (g)","description":"Your usual milk amount for one drink; used in Damian's automatic jug-selection heuristic.","default":160},
+    "singleDrinkJug": {"type":"enum","label":"Jug normally used for one drink","description":"Select small or medium to choose the jug-detection thresholds.","values":["small","medium"],"default":"small"},
+    "weightMode": {"type":"enum","label":"Scale weight mode","description":"Gross includes the empty jug. Tared is milk only: jug size cannot be inferred and no jug weight is subtracted.","values":["gross","tared"],"default":"gross"},
+    "referenceMilkGrams": {"type":"number","label":"Calibration milk weight (g)","description":"Milk only, excluding the jug, from your measured calibration run.","default":0},
+    "referenceSeconds": {"type":"number","label":"Time to your desired milk temperature (s)","description":"Actual steaming time in the calibration run. Use similar milk, starting temperature and steaming technique for subsequent drinks.","default":0},
+    "referenceFlow": {"type":"number","label":"Calibration steam flow (ml/s)","description":"Machine steam flow setting used during calibration. The current flow must match.","default":0},
+    "referenceSteamTemperature": {"type":"number","label":"Calibration steam heater temperature (°C)","description":"Machine heater setpoint used during calibration, 135–165 °C. This is not the milk temperature.","default":0},
+    "maxSeconds": {"type":"number","label":"Maximum calculated duration (s)","description":"Reject longer results rather than silently shortening them. Whole seconds, 1–255.","default":120}
+  },
+  "api": [
+    {"id":"status","type":"http","data":{}},
+    {"id":"calculate","type":"http","data":{}},
+    {"id":"validate","type":"http","data":{}},
+    {"id":"ui","type":"http","data":{}}
+  ]
+}

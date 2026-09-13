@@ -1126,6 +1126,12 @@ it in Decaid UI.
 
 ## External First-Party Plugins
 
+The opt-in [Calibrated Steam Timer](CalibratedSteam.md) is maintained directly in
+Decaid at `packages/calibrated-steam/`, with generated output committed in
+`assets/plugins/calibrated-steam.reaplugin/`. It is bundled and disabled by default;
+it has no separate plugin repository or release download. Its portable calculation
+API and standalone settings page are reusable by skins.
+
 DYE2 ships from [decentespresso/dye2](https://github.com/decentespresso/dye2), the Decent shot upload plugin ships from [decentespresso/shot-upload](https://github.com/decentespresso/shot-upload), and the dcamp community plugin ships from [decentespresso/decaid-dcamp-plugin](https://github.com/decentespresso/decaid-dcamp-plugin). Each repository publishes a `.reaplugin` directory as a release ZIP. CI and local setup run `scripts/fetch_dye2_plugin.sh`, `scripts/fetch_shot_upload_plugin.sh`, and `scripts/fetch_dcamp_plugin.sh` to download pinned releases, verify their checksums and manifest contracts, and unpack them into `assets/plugins/`. Bump a plugin's pinned version and checksum in a normal PR when its repository publishes a new release.
 
 `packages/dye2-plugin/` still holds the DYE2 plugin's original TypeScript + Vite source and is useful as a reference for advanced patterns (REST API client, HTML template rendering, Vite dev server — see `packages/dye2-plugin/README.md`), but it is **not** built or bundled by Decaid anymore and is not authoritative for what ships. Treat the external repositories as the source of truth; update the in-tree DYE2 copy only if it is being kept in sync deliberately.
