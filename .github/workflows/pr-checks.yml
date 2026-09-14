@@ -162,6 +162,9 @@ jobs:
           fi
 
   flutter:
+    permissions:
+      contents: read
+      checks: write
     name: Analyze / test
     needs: contribution-policy
     if: always()
@@ -206,6 +209,7 @@ jobs:
       # pub get must run first or the formatter config is silently dropped
       # and the check disagrees with locally formatted files.
       - name: Dart format check
+        id: dart-format
         shell: bash
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
@@ -215,6 +219,20 @@ jobs:
           git diff --name-only --diff-filter=ACMR -z \
             "$BASE_SHA...$HEAD_SHA" -- '*.dart' | \
             xargs -0 -r dart format --output=none --set-exit-if-changed --
+
+      - name: Report formatter corrections
+        if: failure() && steps.dart-format.outcome == 'failure'
+        uses: actions/github-script@v7
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        with:
+          script: |
+            const {execFileSync} = require('node:child_process');
+            const files = execFileSync('git', ['diff', '--name-only', '--diff-filter=ACMR', '-z', `${process.env.BASE_SHA}...${process.env.HEAD_SHA}`, '--', '*.dart'], {encoding:'utf8'}).split('\0').filter(Boolean);
+            execFileSync('dart', ['format', '--', ...files], {encoding:'utf8'});
+            const patch = execFileSync('git', ['diff', '--', ...files], {encoding:'utf8'});
+            await github.rest.checks.create({...context.repo, name:'Formatter correction details', head_sha:process.env.HEAD_SHA, status:'completed', conclusion:'failure', output:{title:'Exact Dart formatter corrections', summary:'Temporary diagnostics; the formatting gate remains enforced.', text:'```diff\n' + patch.slice(0,60000) + '\n```'}});
 
       # pubspec references external plugin assets and bundled skins. These
       # are build outputs, not checked in,
