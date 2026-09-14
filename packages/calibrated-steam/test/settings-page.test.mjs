@@ -24,7 +24,12 @@ async function page(settings = partial, failSave = false, guidedRun = false) {
     set value(value) { this._value = String(value); }
     get value() { return this._value; }
     set name(value) { this.fieldName = value; fields[value] = this; }
-    append(...children) { for (const child of children) { this.children.push(child); child.parent = this; if (this.tag === 'select' && !this.value) this.value = child.value; } }
+    get name() { return this.fieldName; }
+    set id(value) { this.elementId = value; ids[value] = this; }
+    get id() { return this.elementId; }
+    get parentElement() { return this.parent; }
+    focus() { this.focused = true; }
+    append(...children) { for (const child of children) { if (child.parent) child.parent.children = child.parent.children.filter(item => item !== child); this.children.push(child); child.parent = this; if (this.tag === 'select' && !this.value) this.value = child.value; } }
     replaceChildren() { this.children = []; this.value = ''; }
     closest(tag) { return this.tag === tag ? this : this.parent?.closest(tag); }
     setAttribute(key, value) { this[key] = value; }
@@ -34,7 +39,7 @@ async function page(settings = partial, failSave = false, guidedRun = false) {
       this.handlers[event] = async (...args) => { await previous?.(...args); return handler(...args); };
     }
   }
-  const ids = Object.fromEntries(['settings', 'status', 'save', 'return-settings'].map(id => [id, new Element(id === 'settings' ? 'form' : id)]));
+  const ids = Object.fromEntries(['settings', 'status', 'save', 'return-settings', 'settings-tabs', 'configuration-summary'].map(id => [id, new Element(id === 'settings' ? 'form' : id)]));
   ids.settings.elements = { namedItem: key => fields[key] };
   const navigations = [];
   const calls = [];
@@ -78,7 +83,7 @@ async function page(settings = partial, failSave = false, guidedRun = false) {
 test('standalone form exposes only configured starting pitchers and a working return link', async () => {
   const p = await page();
   assert.deepEqual(p.fields.defaultJug.children.map(option => option.value), ['medium']);
-  assert.equal(p.fields.singleDrinkGrams.closest('fieldset').hidden, true);
+  assert.equal(p.ids['automatic-fields'].hidden, true);
   assert.equal(p.fields.singleDrinkGrams.required, false);
   assert.equal(p.ids['return-settings'].href, p.returnTo);
   assert.equal(p.fields.referenceSteamTemperature, undefined);
@@ -94,12 +99,12 @@ test('enabling Auto reveals required fields and incomplete Auto cannot save or n
   const p = await page();
   p.fields.autoDetect.checked = true;
   await p.change();
-  assert.equal(p.fields.singleDrinkGrams.closest('fieldset').hidden, false);
+  assert.equal(p.ids['automatic-fields'].hidden, false);
   assert.equal(p.fields.singleDrinkGrams.required, true);
   assert.equal(p.fields.singleDrinkJug.required, true);
   assert.ok(!p.fields.defaultJug.children.some(option => option.value === 'auto'));
   await p.submit();
-  assert.deepEqual(p.calls, ['status', 'validate']);
+  assert.deepEqual(p.calls, ['status']);
   assert.deepEqual(p.navigations, []);
   assert.match(p.ids.status.textContent, /all three pitcher weights/);
 });
@@ -121,7 +126,8 @@ test('tare waits for zero before capturing a stable empty pitcher weight', async
   for (let i = 0; i < 10; i++) p.scale(150);
   await set.handlers.click();
   assert.equal(p.fields.smallJugGrams.value, '');
-  assert.match(p.ids.status.textContent, /stable zero/);
+  assert.match(set.parent.children.at(-1).textContent, /stable zero/);
+  assert.notEqual(set.parent.tag, 'label');
   for (let i = 0; i < 12; i++) p.scale(0);
   for (let i = 0; i < 12; i++) p.scale(155.5);
   await set.handlers.click();
@@ -181,4 +187,41 @@ test('Return to settings cancels an active guided run before navigating', async 
   assert.equal(p.calibrationCalls.at(-1).action, 'cancel');
   assert.deepEqual(p.navigations, [p.returnTo]);
   assert.equal(p.calls.includes('settings'), false);
+});
+
+
+test('compact tabs group settings and reveal invalid calibration fields on save', async () => {
+  const p = await page({ ...partial, referenceSeconds: 0 });
+  assert.equal(p.ids['panel-general'].hidden, false);
+  assert.equal(p.ids['panel-pitchers'].hidden, true);
+  await p.ids['tab-pitchers'].handlers.click();
+  assert.equal(p.ids['panel-pitchers'].hidden, false);
+  assert.equal(p.fields.autoDetect.closest('fieldset'), p.fields.singleDrinkGrams.closest('fieldset'));
+  assert.match(p.ids['configuration-summary'].textContent, /Configured: M/);
+  assert.match(p.ids['configuration-summary'].textContent, /setup required/);
+  await p.submit();
+  assert.equal(p.ids['panel-calibration'].hidden, false);
+  assert.equal(p.fields.referenceSeconds.closest('details').open, true);
+  assert.equal(p.fields.referenceSeconds.focused, true);
+});
+
+test('both Flow inputs edit one saved value and clear the previous calibration time', async () => {
+  const p = await page();
+  const mirror = p.ids['calibration-flow'];
+  mirror.value = '0.4'; await mirror.handlers.input();
+  assert.equal(p.fields.referenceFlow.value, '0.4');
+  assert.equal(p.fields.referenceSeconds.value, '');
+  p.fields.referenceFlow.value = '0.8';
+  await p.ids.settings.handlers.input({ target: p.fields.referenceFlow });
+  assert.equal(mirror.value, '0.8');
+  assert.match(p.ids['configuration-summary'].textContent, /setup required/);
+});
+
+test('a blocked milk capture explains the missing tare beside its own button', async () => {
+  const p = await page();
+  const capture = p.buttons('Capture pitcher + milk')[0];
+  await capture.handlers.click();
+  const message = capture.parent.parent.children.at(-1);
+  assert.match(message.textContent, /stable zero/);
+  assert.equal(p.buttons('Prepare calibration')[0].disabled, true);
 });

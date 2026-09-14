@@ -95,7 +95,9 @@ export function calculate(settings, input) {
   const jug = choice !== 'auto' ? choice : (tared ? null : inferredJug(settings, scaleGrams));
   const jugGrams = tared ? 0 : settings[`${jug}JugGrams`];
   const milkGrams = Math.round((scaleGrams - jugGrams) * 10) / 10;
-  if (milkGrams < 10 || milkGrams > 1500) fail('invalid_milk_weight', 'Calculated milk weight must be 10–1500 g. Check the pitcher choice and whether the scale was tared.');
+  const pitcherLabel = tared ? 'milk only' : jug[0].toUpperCase() + jug.slice(1) + ' pitcher';
+  if (milkGrams < 10) fail('invalid_milk_weight', 'Milk < 10 g · ' + pitcherLabel);
+  if (milkGrams > 1500) fail('invalid_milk_weight', 'Milk > 1500 g · ' + pitcherLabel);
   const durationSeconds = Math.round(settings.referenceSeconds * milkGrams / settings.referenceMilkGrams);
   if (durationSeconds < 1 || durationSeconds > 255) fail('duration_out_of_range', `Calculated time ${durationSeconds}s is outside the supported timer range of 1–255 seconds. Check the calibration and milk amount.`);
   return {

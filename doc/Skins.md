@@ -1383,7 +1383,9 @@ companion integration adds Auto to the steam mode cycle and uses pitcher presets
 Render `status.availablePitchers` and gate calculations on `ready`. Open the standalone
 settings form with a `returnTo` URL so Return to settings and successful Save return
 to the calling skin; see the calculator guide for validation and host restrictions.
-The shared page includes tare, pitcher capture and guided steam calibration. Pass
+The shared page includes compact General, Pitchers & Auto, and Calibration tabs,
+with tare, pitcher capture and guided steam calibration. The Flow inputs share
+one setting; capture errors appear beside the relevant control. Pass
 `steamHeaterTemperature` when supplying a remembered normal heater target after
 Auto Off. Defer Auto writes and resets while `status.calibrationActive` is true.
 

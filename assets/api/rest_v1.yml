@@ -3131,7 +3131,7 @@ paths:
           description: Optional remembered normal heater target, used for guided calibration only when the workflow heater target is Off. Not stored or used for temperature compensation.
       responses:
         "200":
-          description: Standalone settings page with scale tare, pitcher capture and guided steam calibration
+          description: Compact General, Pitchers and Auto, and Calibration tabs with shared flow, scale tare, local capture feedback, and guided steam calibration
           content:
             text/html:
               schema: {type: string}

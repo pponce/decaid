@@ -145,3 +145,14 @@ test('calibration flow accepts 0.4 through 2.5 ml/s, including both endpoints', 
     assert.ok(validateSettings({ ...settings, referenceFlow }).some(error => error.field === 'referenceFlow'));
   }
 });
+
+test('low milk errors name the manually selected or inferred pitcher concisely', () => {
+  const settings = { autoDetect: true, smallJugGrams: 150, mediumJugGrams: 400, largeJugGrams: 500,
+    singleDrinkGrams: 100, singleDrinkJug: 'small', weightMode: 'gross', defaultJug: 'small',
+    referenceMilkGrams: 150, referenceSeconds: 25, referenceFlow: 0.4 };
+  for (const jug of ['medium', 'auto']) {
+    assert.throws(() => calculate(settings, { jug, machineState: 'idle', stopAtTemperature: 0,
+      samples: [800, 400, 0].map(ageMs => ({ weightGrams: 405, ageMs })) }),
+      error => error.code === 'invalid_milk_weight' && error.message === 'Milk < 10 g · Medium pitcher');
+  }
+});

@@ -13,6 +13,19 @@ from **Extensions > Plugins > Open**. Both entry points provide a return address
 **Return to settings** leaves without saving, and a successful **Save calibration**
 returns to the calling settings page. Validation or save errors keep the form open.
 
+Version 0.6.0 uses compact **General**, **Pitchers & Auto**, and **Calibration**
+tabs. General contains scale weight mode, starting pitcher selection and steam
+flow. The summary separates configured choices from calibration readiness and
+updates as the draft changes. Save is required to persist changes. Both Flow
+inputs edit the same `referenceFlow`; changing flow clears the old measured time.
+
+Pitchers & Auto places empty-scale tare beside the pitcher rows. Each **Set from
+scale** button fills its own field without focusing it first, and reports success
+or failure in that row. The Auto switch is grouped with its two detection inputs.
+Calibration has a second tare button, live scale status, a milk-capture result,
+and a local explanation of what is needed to enable Prepare. Save reveals the
+tab and manual-values section containing the first invalid setting.
+
 1. Enter at least one empty pitcher weight, or use **Tare empty scale** and then
    **Set from scale** for each size. Wait for the stable-zero message before
    placing an empty pitcher on the scale. Blank or 0 means an unused size.
@@ -49,9 +62,13 @@ default. Measure the calibration time at this flow; recalibrate if it changes.
 Auto applies the calibration flow. After calculation, Streamline restores its
 normal heater setting from before Auto was entered (or its existing remembered
 normal setting if steam was already Off). No heater setting is stored in the
-calculator, and no temperature compensation is performed. Entering Auto, finishing a steam cycle, reloading an active session, or
-returning to it after settings/focus refresh resets to **Off** until the next
-calculation. Off means duration 0 and heater target 0, matching Streamline's manual
+calculator, and no temperature compensation is performed. Entering Auto, finishing a steam cycle, reloading an active session, or leaving
+an armed calculation on the main page resets to **Off** until the next calculation.
+Navigation never waits for this background reset. A confirmed Off state is retained
+across ordinary navigation; unchanged settings are not rewritten. Focus and merely
+opening/closing settings do not refresh steam settings. Reconnect and actual plugin
+configuration changes revalidate them. Duplicate resets share one pending operation;
+a calculation in progress is invalidated if the user leaves the main page. Off means duration 0 and heater target 0, matching Streamline's manual
 Off behavior. It is a reminder rather than a hardware start interlock: a physical
 start may still produce a brief steam burst. Resets wait until the machine is idle.
 
@@ -96,6 +113,10 @@ Results are exposed only after restoration succeeds. App termination or forcibly
 unloading the plugin ends this protection; incomplete results are never saved and
 previous settings should be checked after restarting. A stopped app cannot issue
 machine commands. The machine's own timer remains in effect.
+
+For a low milk weight, the main controls show a compact message such as
+**Milk < 10 g · Medium pitcher**. Auto names the pitcher chosen by the heuristic;
+tared mode identifies milk-only weight. The validation range remains unchanged.
 
 ## Attribution and calculation
 
