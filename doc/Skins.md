@@ -1385,7 +1385,12 @@ settings form with a `returnTo` URL so Return to settings and successful Save re
 to the calling skin; see the calculator guide for validation and host restrictions.
 The shared page includes compact General, Pitchers & Auto, and Calibration tabs,
 with tare, pitcher capture and guided steam calibration. The Flow inputs share
-one setting; capture errors appear beside the relevant control. Pass
+one setting; capture errors appear beside the relevant control. Calibration now
+offers single-flow and 2–4 multiple-flow readings, manually entered or guided.
+Use `status.flowCalibration` for adjustable bounds and pass the selected `flow`
+on both calculation requests. Never extrapolate or retain an armed duration after
+changing flow. Single-flow Auto hides − / +; multiple-flow Auto uses them for
+flow, while normal Flow/Time controls remain available. Pass
 `steamHeaterTemperature` when supplying a remembered normal heater target after
 Auto Off. Defer Auto writes and resets while `status.calibrationActive` is true.
 

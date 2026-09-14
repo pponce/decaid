@@ -3,7 +3,7 @@
   "name": "Auto Steam Calculator",
   "author": "pponce; calculation and pitcher heuristic inspired by Damian / Damian-AU (DSx2)",
   "description": "Estimate steam duration from milk weight using your calibration. Inspired by Damian's DSx2 calculator. This estimates temperature through time; it does not measure milk temperature.",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "apiVersion": 1,
   "permissions": [
     "api",
@@ -70,7 +70,7 @@
     "referenceFlow": {
       "type": "number",
       "label": "Auto steam flow (ml/s)",
-      "description": "Flow used for calibration and applied in Auto steam mode. Configurable from 0.4 to 2.5 ml/s; default 0.4 ml/s. Recalibrate the time if you change this flow.",
+      "description": "Fixed flow for single calibration, or default flow within the multiple-calibration range (0.4–2.5 ml/s).",
       "default": 0.4
     },
     "defaultJug": {
@@ -90,6 +90,22 @@
       "label": "Offer Auto pitcher selection",
       "description": "Enable automatic detection using Damian’s heuristic. Requires all three pitcher weights, gross scale weight, usual milk per drink and the pitcher normally used for one drink.",
       "default": false
+    },
+    "calibrationMode": {
+      "type": "enum",
+      "label": "Calibration type",
+      "values": [
+        "single",
+        "multiple"
+      ],
+      "default": "single",
+      "description": "Single flow is fixed. Multiple flows interpolate between 2–4 measured calibrations."
+    },
+    "flowReadings": {
+      "type": "string",
+      "label": "Measured flow calibrations",
+      "default": "[]",
+      "description": "Managed by the Calibration page. JSON readings with flow, milkGrams and seconds."
     }
   },
   "api": [

@@ -99,3 +99,24 @@ test('removed calibration fields are absent from schema and ignored on upgrade',
     assert.equal(Object.hasOwn(status.settings, key), false);
   }
 });
+
+test('multiple-flow status and calculations survive settings serialization and plugin reload', () => {
+  const settings = { ...valid, calibrationMode: 'multiple', flowReadings: JSON.stringify([
+    { flow: 0.4, milkGrams: 200, seconds: 40 }, { flow: 2.5, milkGrams: 200, seconds: 10 },
+  ]) };
+  const instance = plugin(JSON.parse(JSON.stringify(settings)));
+  const status = call(instance, 'status').json;
+  assert.equal(status.ready, true);
+  assert.equal(status.apiVersion, 3);
+  assert.equal(status.flowCalibration.adjustable, true);
+  assert.equal(status.flowCalibration.minimum, 0.4);
+  assert.equal(status.flowCalibration.maximum, 2.5);
+  const input = { samples: [800, 400, 0].map(ageMs => ({ weightGrams: 350, ageMs })), jug: 'small', machineState: 'idle', stopAtTemperature: 0, flow: 1.45 };
+  assert.equal(call(instance, 'calculate', 'POST', input).json.durationSeconds, 25);
+  assert.equal(call(instance, 'calculate', 'POST', { ...input, flow: 2.6 }).json.code, 'flow_out_of_range');
+  instance.onLoad(status.settings);
+  assert.equal(call(instance, 'calculate', 'POST', input).json.durationSeconds, 25);
+  instance.onLoad({ ...settings, flowReadings: '[]' });
+  assert.equal(call(instance, 'status').json.flowCalibration, null);
+  assert.equal(call(instance, 'status').json.ready, false);
+});

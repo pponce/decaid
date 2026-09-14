@@ -3104,6 +3104,7 @@ paths:
                     type: array
                     description: Configured pitcher choices. Auto appears only when explicitly enabled with valid detection settings; check ready before calculating.
                     items: {type: string, enum: [small, medium, large, auto]}
+                  flowCalibration: {$ref: '#/components/schemas/CalibratedSteamFlowCalibration'}
                   settings: {$ref: '#/components/schemas/PluginSettings'}
                   errors:
                     type: array
@@ -3250,6 +3251,11 @@ paths:
                   type: string
                   enum: [auto, small, medium, large]
                   default: auto
+                flow:
+                  type: number
+                  minimum: 0.4
+                  maximum: 2.5
+                  description: Optional requested flow. Defaults to referenceFlow. Single calibration requires its fixed flow; multiple calibration requires a flow within measured bounds.
                 machineState: {type: string, enum: [idle]}
                 stopAtTemperature: {type: number, enum: [0]}
                 samples:
@@ -3303,7 +3309,7 @@ paths:
         "409":
           description: Guided calibration is active; finish or cancel it before calculating
         "422":
-          description: Invalid request, calibration, observations or operating conditions
+          description: Invalid request, calibration, observations or operating conditions (including flow_out_of_range)
           content:
             application/json:
               schema:
@@ -7446,6 +7452,28 @@ components:
           nullable: true
           description: Timer elapsed time in milliseconds. Null if scale doesn't support timers or timer hasn't been started.
 
+    CalibratedSteamFlowCalibration:
+      type: object
+      nullable: true
+      description: Added in plugin 0.7.0. Null until calibration data is valid; also check ready before calculating.
+      required: [mode, adjustable, minimum, maximum, defaultFlow, readings]
+      properties:
+        mode: {type: string, enum: [single, multiple]}
+        adjustable: {type: boolean}
+        minimum: {type: number, minimum: 0.4, maximum: 2.5}
+        maximum: {type: number, minimum: 0.4, maximum: 2.5}
+        defaultFlow: {type: number, minimum: 0.4, maximum: 2.5}
+        readings:
+          type: array
+          minItems: 1
+          maxItems: 4
+          items:
+            type: object
+            required: [flow, milkGrams, seconds]
+            properties:
+              flow: {type: number, minimum: 0.4, maximum: 2.5}
+              milkGrams: {type: number, minimum: 10, maximum: 1500}
+              seconds: {type: number, minimum: 1, maximum: 255}
     CalibratedSteamSettingError:
       type: object
       required: [field, message]

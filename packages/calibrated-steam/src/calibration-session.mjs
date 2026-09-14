@@ -123,8 +123,15 @@ export function createCalibrationSession({ now = () => Date.now(), readWorkflow,
       startRequested = true;
       busy = true;
       phase = 'starting';
-      try { await requestState('steam'); }
-      catch (error) { fail('Steam start could not be confirmed. Repeat calibration.'); throw error; }
+      try {
+        const workflow = await readWorkflow();
+        if (workflow?.steamSettings?.flow !== measurement.flow || workflow?.steamSettings?.duration !== 255 || workflow?.steamSettings?.stopAtTemperature !== 0) {
+          throw new Error('Calibration steam settings changed. Prepare this reading again.');
+        }
+        if (!fresh() || state !== 'idle' || finishing || stopRequested) throw new Error('Calibration start cancelled; wait for idle.');
+        await requestState('steam');
+      }
+      catch (error) { fail(error.message || 'Steam start could not be confirmed. Repeat calibration.'); throw error; }
       finally { busy = false; startRequested = false; }
       if (finishing || stopRequested) await sendStop(true);
       return snapshot();

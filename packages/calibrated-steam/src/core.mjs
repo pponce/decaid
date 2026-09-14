@@ -1,3 +1,5 @@
+import { validateFlowCalibration, flowCalibration, secondsPerGram } from './flow-calibration.mjs';
+
 export class CalculationError extends Error {
   constructor(code, message) {
     super(message);
@@ -33,8 +35,11 @@ export function validateSettings(settings) {
       errors.push({ field: key, message: `${names[key]} must be ${integer ? 'a whole number ' : ''}between ${minimum} and ${maximum}.` });
     }
   };
-  range('referenceMilkGrams', 10, 1500);
-  range('referenceSeconds', 1, 255);
+  if (settings.calibrationMode !== 'multiple') {
+    range('referenceMilkGrams', 10, 1500);
+    range('referenceSeconds', 1, 255);
+  }
+  errors.push(...validateFlowCalibration(settings));
   range('referenceFlow', 0.4, 2.5);
   for (const key of ['smallJugGrams', 'mediumJugGrams', 'largeJugGrams']) range(key, settings[key] === 0 ? 0 : 1, 3000);
   if (!configuredPitchers(settings).length) errors.push({ field: 'pitchers', message: 'Enter at least one empty pitcher weight (1–3000 g).' });
@@ -98,11 +103,14 @@ export function calculate(settings, input) {
   const pitcherLabel = tared ? 'milk only' : jug[0].toUpperCase() + jug.slice(1) + ' pitcher';
   if (milkGrams < 10) fail('invalid_milk_weight', 'Milk < 10 g · ' + pitcherLabel);
   if (milkGrams > 1500) fail('invalid_milk_weight', 'Milk > 1500 g · ' + pitcherLabel);
-  const durationSeconds = Math.round(settings.referenceSeconds * milkGrams / settings.referenceMilkGrams);
+  const calibration = flowCalibration(settings);
+  const flow = input.flow === undefined ? settings.referenceFlow : input.flow;
+  if (!Number.isFinite(flow) || flow < calibration.minimum || flow > calibration.maximum) fail('flow_out_of_range', 'Choose a flow within the calibrated range.');
+  const durationSeconds = Math.round(secondsPerGram(settings, flow) * milkGrams);
   if (durationSeconds < 1 || durationSeconds > 255) fail('duration_out_of_range', `Calculated time ${durationSeconds}s is outside the supported timer range of 1–255 seconds. Check the calibration and milk amount.`);
   return {
     apiVersion: 3, jug, jugSource: tared ? 'tared' : (choice === 'auto' ? 'heuristic' : 'manual'),
     scaleGrams, jugGrams, milkGrams, durationSeconds,
-    workflowPatch: { steamSettings: { duration: durationSeconds, flow: settings.referenceFlow } },
+    workflowPatch: { steamSettings: { duration: durationSeconds, flow } },
   };
 }

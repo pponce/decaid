@@ -738,8 +738,13 @@ its existing normal heater setting after its temporary Off state. See
 [Auto Steam Calculator](CalibratedSteam.md) for configuration, request/response
 examples and the skin developer contract. No DYE2 dependency is required.
 
-Auto Steam Calculator v0.6.0 uses calculator API v3 (duration and flow only).
-Status includes `availablePitchers` and `calibrationActive`. Guided calibration
+Auto Steam Calculator v0.7.0 uses calculator API v3 (duration and flow only).
+Status includes `availablePitchers`, `calibrationActive`, and optional
+`flowCalibration` (mode, adjustable bounds, default and parsed readings; null if
+invalid). `calculate` accepts optional `flow`, defaulting to `referenceFlow`.
+Multiple-flow calibration interpolates seconds per gram between adjacent readings
+and rejects flows outside measured bounds with `flow_out_of_range`. Old settings
+remain single-flow. Readings persist as a JSON string in `flowReadings`. Guided calibration
 uses a token-owned session to prepare flow/heater/timer, follow actual pouring
 time and restore the prior steam settings. Its actions are begin, heartbeat, start,
 stop and cancel; see the calculator guide for the lease and result contract. Skins render only

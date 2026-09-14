@@ -1,4 +1,4 @@
-function mountCalibrationPage({ form, labels, save, back, status, request, base, field, updateChoices, syncFlow }, captureWeight) {
+function mountCalibrationPage({ form, labels, save, back, status, request, base, field, updateChoices, syncFlow, flowPlan }, captureWeight) {
   const sizes = ['small', 'medium', 'large'];
   let samples = [], zeroConfirmed = false, awaitingZero = false, tarePending = false;
   let captured = null, token = null, active = false, pending = false, timer = null, closed = false;
@@ -22,7 +22,7 @@ function mountCalibrationPage({ form, labels, save, back, status, request, base,
   weights.insertBefore(scaleBox, labels.smallJugGrams);
   const guided = make('fieldset'); guided.className = 'guided-calibration';
   guided.append(make('legend', 'Guided calibration'));
-  const flowLabel = make('label', 'Steam flow (ml/s)'); flowLabel.className = 'field calibration-flow';
+  const flowLabel = make('label', 'Auto flow / default (ml/s)'); flowLabel.className = 'field calibration-flow';
   const flow = make('input'); flow.id = 'calibration-flow'; flow.type = 'number'; flow.min = '0.4'; flow.max = '2.5'; flow.step = '0.1'; flow.value = field('referenceFlow').value;
   flow.addEventListener('input', () => syncFlow(flow.value)); flowLabel.append(flow); guided.append(flowLabel);
   const weighStep = make('div'); weighStep.className = 'guided-step'; weighStep.append(make('h2', '1 · Weigh the milk'));
@@ -90,7 +90,7 @@ function mountCalibrationPage({ form, labels, save, back, status, request, base,
     if (milkGrams > 1500) throw new Error('Milk > 1500 g · ' + name + ' pitcher');
     captured = { pitcher: size, pitcherGrams, milkGrams };
     milk.textContent = total + ' g total − ' + pitcherGrams + ' g pitcher = ' + milkGrams + ' g milk. Captured.';
-    runStatus.textContent = 'Ready to prepare at ' + field('referenceFlow').value + ' ml/s.';
+    runStatus.textContent = 'Ready to prepare at ' + flowPlan.currentFlow() + ' ml/s.';
     paint();
   }, milk);
   async function command(action, values = {}) {
@@ -119,11 +119,9 @@ function mountCalibrationPage({ form, labels, save, back, status, request, base,
     elapsed.textContent = 'Steaming: ' + Number(value.seconds || 0).toFixed(1) + ' s';
     if (value.result && !appliedResult) {
       appliedResult = true; captured = null;
-      field('referenceMilkGrams').value = value.result.milkGrams;
-      field('referenceSeconds').value = value.result.seconds;
-      syncFlow(value.result.flow, true);
+      flowPlan.acceptMeasurement(value.result);
       review.open = true;
-      runStatus.textContent = 'Measured ' + value.result.milkGrams + ' g milk in ' + value.result.seconds + ' s at ' + value.result.flow + ' ml/s. Review, then Save calibration, or capture fresh milk to try again.';
+      runStatus.textContent = 'Measured ' + value.result.milkGrams + ' g milk in ' + value.result.seconds + ' s at ' + value.result.flow + ' ml/s. Select Use reading to continue, or capture fresh milk to try again.';
     }
     paint(); schedule();
     if (returnAfterRestore && !active) { closed = true; window.location.assign(back.href); }
@@ -133,7 +131,7 @@ function mountCalibrationPage({ form, labels, save, back, status, request, base,
     pending = true; appliedResult = false; paint();
     try {
       const heaterTemperature = Number(new URL(window.location.href).searchParams.get('steamHeaterTemperature'));
-      await command('begin', { ...captured, flow: Number(field('referenceFlow').value),
+      await command('begin', { ...captured, flow: flowPlan.currentFlow(),
         ...(Number.isInteger(heaterTemperature) && heaterTemperature >= 135 && heaterTemperature <= 165 ? { heaterTemperature } : {}) });
     } finally {
       pending = false; paint();
@@ -148,9 +146,10 @@ function mountCalibrationPage({ form, labels, save, back, status, request, base,
     const locked = active || pending;
     for (const key of Object.keys(labels)) field(key).disabled = locked;
     flow.disabled = locked;
+    flowPlan.lock(locked);
     if (!locked) updateChoices();
     for (const control of [tarePitchers, tareMilk, ...captureButtons, captureMilk, pitcher]) control.disabled = locked || tarePending;
-    prepare.disabled = locked || !captured;
+    prepare.disabled = locked || !captured || !Number.isFinite(flowPlan.currentFlow());
     cancel.disabled = !active;
     save.disabled = locked;
     start.disabled = pending || !active || sessionPhase !== 'armed';
@@ -220,6 +219,7 @@ function mountCalibrationPage({ form, labels, save, back, status, request, base,
     scaleSocket?.close();
     if (active && token) fetch(base + '/calibration', { method: 'POST', keepalive: true, headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'cancel', token }) }).catch(() => {});
   });
+  flowPlan.attach(guided, review, flowLabel, () => { clearCapture(); zeroConfirmed = false; samples = []; appliedResult = false; elapsed.textContent = 'Steaming: 0.0 s'; paint(); });
   updatePitchers();
   connectScale();
   return { isActive: () => active || pending, flowChanged() { appliedResult = false; runStatus.textContent = 'Flow changed. Repeat calibration or enter a time measured at this flow.'; }, assertCanSave() { if (active || pending) throw new Error('Finish or cancel calibration before saving.'); } };

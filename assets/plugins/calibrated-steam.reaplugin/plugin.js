@@ -1,7 +1,69 @@
 /* Calibrated Steam Timer. GPL-3.0-only. Inspired by Damian / Damian-AU, DSx2. */
 (function () {
 "use strict";
-const MANIFEST = {"id":"calibrated-steam.reaplugin","name":"Auto Steam Calculator","author":"pponce; calculation and pitcher heuristic inspired by Damian / Damian-AU (DSx2)","description":"Estimate steam duration from milk weight using your calibration. Inspired by Damian's DSx2 calculator. This estimates temperature through time; it does not measure milk temperature.","version":"0.6.0","apiVersion":1,"permissions":["api","events.machine"],"settings":{"smallJugGrams":{"type":"number","label":"Small empty pitcher (g)","description":"Untared weight of the empty small pitcher. Leave blank or 0 if not configured.","default":0},"mediumJugGrams":{"type":"number","label":"Medium empty pitcher (g)","description":"Untared weight of the empty medium pitcher. Leave blank or 0 if not configured.","default":0},"largeJugGrams":{"type":"number","label":"Large empty pitcher (g)","description":"Untared weight of the empty large pitcher. Leave blank or 0 if not configured.","default":0},"singleDrinkGrams":{"type":"number","label":"Usual milk per drink (g)","description":"Milk only for one drink; used to infer pitcher size in Auto. This can differ from your calibration milk weight.","default":0},"singleDrinkJug":{"type":"enum","label":"Pitcher normally used for one drink","description":"Select small or medium to choose the pitcher-detection thresholds.","values":["","small","medium"],"default":""},"weightMode":{"type":"enum","label":"Scale weight mode","description":"Gross includes the empty pitcher. Tared is milk only: pitcher size cannot be inferred and no pitcher weight is subtracted.","values":["gross","tared"],"default":"gross"},"referenceMilkGrams":{"type":"number","label":"Calibration milk weight (g)","description":"Milk only, excluding the pitcher, from your measured calibration run.","default":0},"referenceSeconds":{"type":"number","label":"Time to your desired milk temperature (s)","description":"Actual steaming time in the calibration run. Use similar milk, starting temperature and steaming technique for subsequent drinks.","default":0},"referenceFlow":{"type":"number","label":"Auto steam flow (ml/s)","description":"Flow used for calibration and applied in Auto steam mode. Configurable from 0.4 to 2.5 ml/s; default 0.4 ml/s. Recalibrate the time if you change this flow.","default":0.4},"defaultJug":{"type":"enum","label":"Starting pitcher selection","description":"Small, Medium or Large subtracts that pitcher weight. Auto guesses the pitcher using milk per drink. Streamline remembers subsequent preset selections.","values":["small","medium","large","auto"],"default":"small"},"autoDetect":{"type":"boolean","label":"Offer Auto pitcher selection","description":"Enable automatic detection using Damian’s heuristic. Requires all three pitcher weights, gross scale weight, usual milk per drink and the pitcher normally used for one drink.","default":false}},"api":[{"id":"status","type":"http","data":{}},{"id":"calculate","type":"http","data":{}},{"id":"validate","type":"http","data":{}},{"id":"ui","type":"http","data":{}},{"id":"calibration","type":"http","data":{}}]};
+const MANIFEST = {"id":"calibrated-steam.reaplugin","name":"Auto Steam Calculator","author":"pponce; calculation and pitcher heuristic inspired by Damian / Damian-AU (DSx2)","description":"Estimate steam duration from milk weight using your calibration. Inspired by Damian's DSx2 calculator. This estimates temperature through time; it does not measure milk temperature.","version":"0.7.0","apiVersion":1,"permissions":["api","events.machine"],"settings":{"smallJugGrams":{"type":"number","label":"Small empty pitcher (g)","description":"Untared weight of the empty small pitcher. Leave blank or 0 if not configured.","default":0},"mediumJugGrams":{"type":"number","label":"Medium empty pitcher (g)","description":"Untared weight of the empty medium pitcher. Leave blank or 0 if not configured.","default":0},"largeJugGrams":{"type":"number","label":"Large empty pitcher (g)","description":"Untared weight of the empty large pitcher. Leave blank or 0 if not configured.","default":0},"singleDrinkGrams":{"type":"number","label":"Usual milk per drink (g)","description":"Milk only for one drink; used to infer pitcher size in Auto. This can differ from your calibration milk weight.","default":0},"singleDrinkJug":{"type":"enum","label":"Pitcher normally used for one drink","description":"Select small or medium to choose the pitcher-detection thresholds.","values":["","small","medium"],"default":""},"weightMode":{"type":"enum","label":"Scale weight mode","description":"Gross includes the empty pitcher. Tared is milk only: pitcher size cannot be inferred and no pitcher weight is subtracted.","values":["gross","tared"],"default":"gross"},"referenceMilkGrams":{"type":"number","label":"Calibration milk weight (g)","description":"Milk only, excluding the pitcher, from your measured calibration run.","default":0},"referenceSeconds":{"type":"number","label":"Time to your desired milk temperature (s)","description":"Actual steaming time in the calibration run. Use similar milk, starting temperature and steaming technique for subsequent drinks.","default":0},"referenceFlow":{"type":"number","label":"Auto steam flow (ml/s)","description":"Fixed flow for single calibration, or default flow within the multiple-calibration range (0.4–2.5 ml/s).","default":0.4},"defaultJug":{"type":"enum","label":"Starting pitcher selection","description":"Small, Medium or Large subtracts that pitcher weight. Auto guesses the pitcher using milk per drink. Streamline remembers subsequent preset selections.","values":["small","medium","large","auto"],"default":"small"},"autoDetect":{"type":"boolean","label":"Offer Auto pitcher selection","description":"Enable automatic detection using Damian’s heuristic. Requires all three pitcher weights, gross scale weight, usual milk per drink and the pitcher normally used for one drink.","default":false},"calibrationMode":{"type":"enum","label":"Calibration type","values":["single","multiple"],"default":"single","description":"Single flow is fixed. Multiple flows interpolate between 2–4 measured calibrations."},"flowReadings":{"type":"string","label":"Measured flow calibrations","default":"[]","description":"Managed by the Calibration page. JSON readings with flow, milkGrams and seconds."}},"api":[{"id":"status","type":"http","data":{}},{"id":"calculate","type":"http","data":{}},{"id":"validate","type":"http","data":{}},{"id":"ui","type":"http","data":{}},{"id":"calibration","type":"http","data":{}}]};
+function readFlowReadings(settings) {
+  try {
+    if (typeof settings.flowReadings !== 'string' || settings.flowReadings.length > 4096) return null;
+    const readings = JSON.parse(settings.flowReadings);
+    return Array.isArray(readings) ? readings : null;
+  } catch { return null; }
+}
+
+function validFlowReading(reading) {
+  return reading && Number.isFinite(reading.flow) && reading.flow >= 0.4 && reading.flow <= 2.5 &&
+    Number.isFinite(reading.milkGrams) && reading.milkGrams >= 10 && reading.milkGrams <= 1500 &&
+    Number.isFinite(reading.seconds) && reading.seconds >= 1 && reading.seconds <= 255;
+}
+
+function validateFlowCalibration(settings) {
+  const mode = settings.calibrationMode ?? 'single';
+  if (!['single', 'multiple'].includes(mode)) return [{ field: 'calibrationMode', message: 'Choose Single flow or Multiple flows.' }];
+  if (mode === 'single') return [];
+  const readings = readFlowReadings(settings);
+  if (!readings || readings.length < 2 || readings.length > 4 || readings.some((reading, index) =>
+    !validFlowReading(reading) || (index > 0 && (!validFlowReading(readings[index - 1]) || reading.flow - readings[index - 1].flow < 0.099999)))) {
+    return [{ field: 'flowReadings', message: 'Complete 2–4 readings with increasing flows at least 0.1 ml/s apart, 10–1500 g of milk and 1–255 seconds.' }];
+  }
+  if (!Number.isFinite(settings.referenceFlow) || settings.referenceFlow < readings[0].flow || settings.referenceFlow > readings[readings.length - 1].flow) {
+    return [{ field: 'referenceFlow', message: 'Default Auto flow must be within the calibrated range.' }];
+  }
+  return [];
+}
+
+function flowCalibration(settings) {
+  if (validateFlowCalibration(settings).length) return null;
+  const multiple = settings.calibrationMode === 'multiple';
+  const readings = multiple ? readFlowReadings(settings) : [{ flow: settings.referenceFlow, milkGrams: settings.referenceMilkGrams, seconds: settings.referenceSeconds }];
+  if (!readings.every(validFlowReading)) return null;
+  return { mode: multiple ? 'multiple' : 'single', adjustable: multiple,
+    minimum: readings[0].flow, maximum: readings[readings.length - 1].flow, defaultFlow: settings.referenceFlow, readings };
+}
+
+function secondsPerGram(settings, flow) {
+  if (settings.calibrationMode !== 'multiple') return settings.referenceSeconds / settings.referenceMilkGrams;
+  const readings = readFlowReadings(settings);
+  for (let i = 1; i < readings.length; i++) {
+    const a = readings[i - 1], b = readings[i];
+    if (flow <= b.flow) {
+      const position = (flow - a.flow) / (b.flow - a.flow);
+      return (1 - position) * a.seconds / a.milkGrams + position * b.seconds / b.milkGrams;
+    }
+  }
+  return NaN;
+}
+
+function proposedFlows(minimum, maximum, count) {
+  if (![2, 3, 4].includes(count) || !Number.isFinite(minimum) || !Number.isFinite(maximum) || minimum < 0.4 || maximum > 2.5 || maximum <= minimum) {
+    throw new Error('Choose 2–4 readings and a flow range between 0.4 and 2.5 ml/s.');
+  }
+  const flows = Array.from({ length: count }, (_, index) => Math.round((minimum + (maximum - minimum) * index / (count - 1)) * 10) / 10);
+  flows[0] = minimum; flows[flows.length - 1] = maximum;
+  if (flows.some((flow, index) => index > 0 && flow - flows[index - 1] < 0.099999)) throw new Error('Choose fewer readings or a wider flow range.');
+  return flows;
+}
+
+
 class CalculationError extends Error {
   constructor(code, message) {
     super(message);
@@ -37,8 +99,11 @@ function validateSettings(settings) {
       errors.push({ field: key, message: `${names[key]} must be ${integer ? 'a whole number ' : ''}between ${minimum} and ${maximum}.` });
     }
   };
-  range('referenceMilkGrams', 10, 1500);
-  range('referenceSeconds', 1, 255);
+  if (settings.calibrationMode !== 'multiple') {
+    range('referenceMilkGrams', 10, 1500);
+    range('referenceSeconds', 1, 255);
+  }
+  errors.push(...validateFlowCalibration(settings));
   range('referenceFlow', 0.4, 2.5);
   for (const key of ['smallJugGrams', 'mediumJugGrams', 'largeJugGrams']) range(key, settings[key] === 0 ? 0 : 1, 3000);
   if (!configuredPitchers(settings).length) errors.push({ field: 'pitchers', message: 'Enter at least one empty pitcher weight (1–3000 g).' });
@@ -102,12 +167,15 @@ function calculate(settings, input) {
   const pitcherLabel = tared ? 'milk only' : jug[0].toUpperCase() + jug.slice(1) + ' pitcher';
   if (milkGrams < 10) fail('invalid_milk_weight', 'Milk < 10 g · ' + pitcherLabel);
   if (milkGrams > 1500) fail('invalid_milk_weight', 'Milk > 1500 g · ' + pitcherLabel);
-  const durationSeconds = Math.round(settings.referenceSeconds * milkGrams / settings.referenceMilkGrams);
+  const calibration = flowCalibration(settings);
+  const flow = input.flow === undefined ? settings.referenceFlow : input.flow;
+  if (!Number.isFinite(flow) || flow < calibration.minimum || flow > calibration.maximum) fail('flow_out_of_range', 'Choose a flow within the calibrated range.');
+  const durationSeconds = Math.round(secondsPerGram(settings, flow) * milkGrams);
   if (durationSeconds < 1 || durationSeconds > 255) fail('duration_out_of_range', `Calculated time ${durationSeconds}s is outside the supported timer range of 1–255 seconds. Check the calibration and milk amount.`);
   return {
     apiVersion: 3, jug, jugSource: tared ? 'tared' : (choice === 'auto' ? 'heuristic' : 'manual'),
     scaleGrams, jugGrams, milkGrams, durationSeconds,
-    workflowPatch: { steamSettings: { duration: durationSeconds, flow: settings.referenceFlow } },
+    workflowPatch: { steamSettings: { duration: durationSeconds, flow } },
   };
 }
 
@@ -252,8 +320,15 @@ function createCalibrationSession({ now = () => Date.now(), readWorkflow, writeS
       startRequested = true;
       busy = true;
       phase = 'starting';
-      try { await requestState('steam'); }
-      catch (error) { fail('Steam start could not be confirmed. Repeat calibration.'); throw error; }
+      try {
+        const workflow = await readWorkflow();
+        if (workflow?.steamSettings?.flow !== measurement.flow || workflow?.steamSettings?.duration !== 255 || workflow?.steamSettings?.stopAtTemperature !== 0) {
+          throw new Error('Calibration steam settings changed. Prepare this reading again.');
+        }
+        if (!fresh() || state !== 'idle' || finishing || stopRequested) throw new Error('Calibration start cancelled; wait for idle.');
+        await requestState('steam');
+      }
+      catch (error) { fail(error.message || 'Steam start could not be confirmed. Repeat calibration.'); throw error; }
       finally { busy = false; startRequested = false; }
       if (finishing || stopRequested) await sendStop(true);
       return snapshot();
@@ -276,7 +351,172 @@ function createCalibrationSession({ now = () => Date.now(), readWorkflow, writeS
   };
 }
 
-function mountCalibrationPage({ form, labels, save, back, status, request, base, field, updateChoices, syncFlow }, captureWeight) {
+function mountFlowCalibrationPage({ form, labels, field, updateChoices, syncFlow }, readReadings, suggestFlows, validReading) {
+  const make = (tag, text) => { const element = document.createElement(tag); if (text) element.textContent = text; return element; };
+  const panel = labels.referenceMilkGrams.closest('fieldset').parentElement;
+  const manual = labels.referenceMilkGrams.closest('fieldset');
+  const config = make('fieldset'); config.className = 'flow-setup'; config.append(make('legend', 'Calibration type'));
+  const modes = make('div'); modes.className = 'calibration-actions full-width'; config.append(modes);
+  const controls = [];
+  const addButton = (text, parent, action, id) => {
+    const button = make('button', text); button.type = 'button'; if (id) button.id = id;
+    button.addEventListener('click', () => { try { action(); } catch (error) { notice.textContent = error.message; } });
+    parent.append(button); controls.push(button); return button;
+  };
+  let readings = readReadings({ flowReadings: field('flowReadings').value }) || [];
+  let multiple = field('calibrationMode').value === 'multiple';
+  if (!multiple || readings.length < 2 || readings.length > 4) readings = [];
+  let flows = readings.length ? readings.map(reading => reading?.flow) : [Number(field('referenceFlow').value)];
+  let index = 0, locked = false, reviewing = false, guidedMode = false, guide = null, review = null, planValid = true;
+  let clearGuided = () => {}, measurementReady = false;
+  const single = addButton('Single flow', modes, () => setMode(false), 'flow-mode-single');
+  const multi = addButton('Multiple flows', modes, () => setMode(true), 'flow-mode-multiple');
+  const range = make('div'); range.className = 'field-grid full-width'; config.append(range);
+  function input(label, value, type = 'number') {
+    const wrapper = make('label', label); wrapper.className = 'field';
+    const element = make(type === 'select' ? 'select' : 'input');
+    if (type !== 'select') { element.type = type; element.step = '0.1'; element.min = '0.4'; element.max = '2.5'; }
+    element.value = value; wrapper.append(element); controls.push(element);
+    return { wrapper, element };
+  }
+  const minimum = input('Minimum flow (ml/s)', readings[0]?.flow ?? 0.4); minimum.element.id = 'flow-minimum';
+  const maximum = input('Maximum flow (ml/s)', readings[readings.length - 1]?.flow ?? 2.5); maximum.element.id = 'flow-maximum';
+  const count = input('Readings', readings.length || 3, 'select'); count.element.id = 'flow-reading-count';
+  for (const n of [2, 3, 4]) { const option = make('option', n === 3 ? '3 · recommended' : String(n)); option.value = n; count.element.append(option); }
+  count.element.value = readings.length || 3;
+  range.append(minimum.wrapper, maximum.wrapper, count.wrapper);
+  const recommendation = make('p', 'Choose 3 or 4 readings for a wider range or a better estimate between measured flows.'); recommendation.className = 'full-width'; range.append(recommendation);
+  const flowSlot = make('div'); config.append(flowSlot);
+  const target = input('Target milk per reading (g)', Number(field('referenceMilkGrams').value) || 200);
+  target.element.id = 'flow-target-milk'; target.element.min = '10'; target.element.max = '1500'; target.element.step = '1'; config.append(target.wrapper);
+  const notice = make('p'); notice.className = 'local-status full-width'; notice.id = 'flow-calibration-status'; notice.setAttribute('role', 'status'); notice.setAttribute('aria-live', 'polite'); config.append(notice);
+  panel.insertBefore(config, manual);
+  const steps = make('div'); steps.className = 'calibration-actions'; steps.id = 'flow-reading-steps'; panel.insertBefore(steps, manual);
+  const readingPanel = make('section'); readingPanel.id = 'flow-reading-panel'; panel.insertBefore(readingPanel, manual); readingPanel.append(manual);
+  const heading = make('h2'); heading.id = 'flow-reading-title'; readingPanel.insertBefore(heading, manual);
+  const instructions = make('p', 'Use fresh milk at the same starting temperature and the same pitcher for each reading. Stop at your usual target temperature.'); readingPanel.insertBefore(instructions, manual);
+  const methods = make('div'); methods.className = 'calibration-actions'; readingPanel.insertBefore(methods, manual);
+  const manualButton = addButton('Enter measured time', methods, () => setMethod(false), 'flow-method-manual');
+  const guidedButton = addButton('Guided calibration', methods, () => setMethod(true), 'flow-method-guided');
+  const actions = make('div'); actions.className = 'calibration-actions'; panel.append(actions);
+  const previous = addButton('Previous reading', actions, () => openReading(index - 1), 'flow-previous');
+  const use = addButton('Use reading & next', actions, useReading, 'flow-use-reading');
+  const summary = make('fieldset'); summary.id = 'flow-review'; summary.append(make('legend', 'Review calibration')); panel.append(summary);
+  const summaryRows = make('div'); summaryRows.className = 'full-width'; summary.append(summaryRows);
+  function stored() {
+    field('calibrationMode').value = multiple ? 'multiple' : 'single';
+    field('flowReadings').value = JSON.stringify(multiple ? flows.map((flow, i) => readings[i] || { flow, milkGrams: 0, seconds: 0 }) : []);
+    updateChoices();
+  }
+  function paint() {
+    single.setAttribute('aria-pressed', String(!multiple)); multi.setAttribute('aria-pressed', String(multiple));
+    range.hidden = !multiple;
+    steps.hidden = !multiple;
+    heading.textContent = planValid ? 'Reading ' + (index + 1) + ' of ' + flows.length + ' · ' + currentFlow() + ' ml/s' : 'Choose a valid flow range';
+    readingPanel.hidden = reviewing; actions.hidden = reviewing; summary.hidden = !reviewing;
+    use.textContent = index === flows.length - 1 ? 'Use reading & review' : 'Use reading & next';
+    for (const control of controls) control.disabled = locked;
+    previous.disabled = locked || index === 0;
+    use.disabled = locked || !planValid || (guidedMode && !measurementReady);
+    steps.replaceChildren();
+    flows.forEach((flow, i) => {
+      const button = make('button', flow + ' ml/s · ' + (validReading(readings[i]) ? 'Captured' : 'Pending'));
+      button.type = 'button'; button.disabled = locked; button.setAttribute('aria-pressed', String(i === index && !reviewing));
+      button.addEventListener('click', () => openReading(i)); steps.append(button);
+    });
+    if (guide && review) { guide.hidden = !guidedMode; review.hidden = guidedMode; review.open = true; }
+    manualButton.setAttribute('aria-pressed', String(!guidedMode)); guidedButton.setAttribute('aria-pressed', String(guidedMode));
+    summaryRows.replaceChildren();
+    flows.forEach((flow, i) => {
+      const row = make('div'); row.className = 'scale-tools';
+      const reading = readings[i];
+      row.append(make('p', flow + ' ml/s · ' + (validReading(reading) ? reading.milkGrams + ' g · ' + reading.seconds + ' s' : 'Not captured')));
+      const redo = make('button', 'Redo'); redo.type = 'button'; redo.disabled = locked; redo.addEventListener('click', () => openReading(i)); row.append(redo); summaryRows.append(row);
+    });
+  }
+  function currentFlow() { return !planValid ? NaN : multiple ? flows[index] : Number(field('referenceFlow').value); }
+  function openReading(next) {
+    if (locked || next < 0 || next >= flows.length) return;
+    index = next; reviewing = false; measurementReady = false; clearGuided();
+    const reading = readings[index];
+    field('referenceMilkGrams').value = reading?.milkGrams || target.element.value;
+    field('referenceSeconds').value = reading?.seconds || '';
+    notice.textContent = 'Draft readings are saved only when you select Save calibration.';
+    paint();
+  }
+  function planFlows() {
+    if (locked) return;
+    try {
+      const next = suggestFlows(Number(minimum.element.value), Number(maximum.element.value), Number(count.element.value));
+      planValid = true; flows = next; readings = flows.map(() => null); stored(); openReading(0);
+      notice.textContent = 'Capture ' + flows.length + ' readings. Use fresh milk for each flow.';
+    } catch (error) {
+      planValid = false; readings = []; field('flowReadings').value = '[]'; notice.textContent = error.message; updateChoices(); paint();
+    }
+  }
+  function setMode(value) {
+    if (locked || value === multiple) return;
+    multiple = value; reviewing = false;
+    if (multiple) planFlows();
+    else { planValid = true; flows = [Number(field('referenceFlow').value)]; readings = [null]; field('referenceSeconds').value = ''; stored(); openReading(0); }
+    stored(); paint();
+  }
+  function setMethod(value) {
+    if (locked) return;
+    guidedMode = value; paint();
+  }
+  function useReading() {
+    if (locked || !planValid || (guidedMode && !measurementReady)) return;
+    const reading = { flow: currentFlow(), milkGrams: Number(field('referenceMilkGrams').value), seconds: Number(field('referenceSeconds').value) };
+    if (!validReading(reading)) throw new Error('Enter 10–1500 g of milk and 1–255 seconds measured at this flow.');
+    readings[index] = reading; stored();
+    if (index < flows.length - 1) openReading(index + 1);
+    else {
+      reviewing = true;
+      notice.textContent = multiple ? 'Review every reading, then save. Auto flow will be adjustable within this range.' : 'Review the reading, then save. Auto flow will be fixed.';
+      paint();
+    }
+  }
+  for (const element of [minimum.element, maximum.element, count.element]) element.addEventListener('change', planFlows);
+  target.element.addEventListener('change', () => { if (!locked && !validReading(readings[index])) field('referenceMilkGrams').value = target.element.value; });
+  form.addEventListener('input', event => {
+    if (event.target === field('referenceMilkGrams') || event.target === field('referenceSeconds')) {
+      if (multiple) { readings[index] = null; stored(); }
+      measurementReady = false; reviewing = false; paint();
+    }
+  });
+  if (multiple && !readings.length) planFlows();
+  if (!multiple) readings = [{ flow: currentFlow(), milkGrams: Number(field('referenceMilkGrams').value), seconds: Number(field('referenceSeconds').value) }];
+  if (multiple) openReading(0);
+  notice.textContent = 'Draft changes · your saved calibration remains active until Save.';
+  paint();
+  return {
+    currentFlow,
+    attach(guided, measured, flowLabel, clear) {
+      guide = guided; review = measured; clearGuided = clear; flowSlot.append(flowLabel); paint();
+    },
+    lock(value) { locked = value; paint(); },
+    acceptMeasurement(result) {
+      if (result.flow !== currentFlow()) throw new Error('The measurement flow changed. Repeat this reading.');
+      field('referenceMilkGrams').value = result.milkGrams;
+      field('referenceSeconds').value = result.seconds;
+      if (multiple) { readings[index] = null; stored(); }
+      measurementReady = true; reviewing = false; paint();
+    },
+    flowChanged() {
+      if (!multiple) { flows = [Number(field('referenceFlow').value)]; readings = [null]; measurementReady = false; clearGuided(); reviewing = false; }
+      paint();
+    },
+    reveal(key) { reviewing = false; if (['referenceMilkGrams', 'referenceSeconds'].includes(key)) guidedMode = false; paint(); },
+    assertCanSave() {
+      if (multiple && (!planValid || flows.length < 2 || readings.length !== flows.length || !readings.every(validReading))) {
+        reviewing = false; paint(); throw Object.assign(new Error('Complete and use every flow reading before saving.'), { field: 'flowReadings' });
+      }
+    },
+  };
+}
+
+function mountCalibrationPage({ form, labels, save, back, status, request, base, field, updateChoices, syncFlow, flowPlan }, captureWeight) {
   const sizes = ['small', 'medium', 'large'];
   let samples = [], zeroConfirmed = false, awaitingZero = false, tarePending = false;
   let captured = null, token = null, active = false, pending = false, timer = null, closed = false;
@@ -300,7 +540,7 @@ function mountCalibrationPage({ form, labels, save, back, status, request, base,
   weights.insertBefore(scaleBox, labels.smallJugGrams);
   const guided = make('fieldset'); guided.className = 'guided-calibration';
   guided.append(make('legend', 'Guided calibration'));
-  const flowLabel = make('label', 'Steam flow (ml/s)'); flowLabel.className = 'field calibration-flow';
+  const flowLabel = make('label', 'Auto flow / default (ml/s)'); flowLabel.className = 'field calibration-flow';
   const flow = make('input'); flow.id = 'calibration-flow'; flow.type = 'number'; flow.min = '0.4'; flow.max = '2.5'; flow.step = '0.1'; flow.value = field('referenceFlow').value;
   flow.addEventListener('input', () => syncFlow(flow.value)); flowLabel.append(flow); guided.append(flowLabel);
   const weighStep = make('div'); weighStep.className = 'guided-step'; weighStep.append(make('h2', '1 · Weigh the milk'));
@@ -368,7 +608,7 @@ function mountCalibrationPage({ form, labels, save, back, status, request, base,
     if (milkGrams > 1500) throw new Error('Milk > 1500 g · ' + name + ' pitcher');
     captured = { pitcher: size, pitcherGrams, milkGrams };
     milk.textContent = total + ' g total − ' + pitcherGrams + ' g pitcher = ' + milkGrams + ' g milk. Captured.';
-    runStatus.textContent = 'Ready to prepare at ' + field('referenceFlow').value + ' ml/s.';
+    runStatus.textContent = 'Ready to prepare at ' + flowPlan.currentFlow() + ' ml/s.';
     paint();
   }, milk);
   async function command(action, values = {}) {
@@ -397,11 +637,9 @@ function mountCalibrationPage({ form, labels, save, back, status, request, base,
     elapsed.textContent = 'Steaming: ' + Number(value.seconds || 0).toFixed(1) + ' s';
     if (value.result && !appliedResult) {
       appliedResult = true; captured = null;
-      field('referenceMilkGrams').value = value.result.milkGrams;
-      field('referenceSeconds').value = value.result.seconds;
-      syncFlow(value.result.flow, true);
+      flowPlan.acceptMeasurement(value.result);
       review.open = true;
-      runStatus.textContent = 'Measured ' + value.result.milkGrams + ' g milk in ' + value.result.seconds + ' s at ' + value.result.flow + ' ml/s. Review, then Save calibration, or capture fresh milk to try again.';
+      runStatus.textContent = 'Measured ' + value.result.milkGrams + ' g milk in ' + value.result.seconds + ' s at ' + value.result.flow + ' ml/s. Select Use reading to continue, or capture fresh milk to try again.';
     }
     paint(); schedule();
     if (returnAfterRestore && !active) { closed = true; window.location.assign(back.href); }
@@ -411,7 +649,7 @@ function mountCalibrationPage({ form, labels, save, back, status, request, base,
     pending = true; appliedResult = false; paint();
     try {
       const heaterTemperature = Number(new URL(window.location.href).searchParams.get('steamHeaterTemperature'));
-      await command('begin', { ...captured, flow: Number(field('referenceFlow').value),
+      await command('begin', { ...captured, flow: flowPlan.currentFlow(),
         ...(Number.isInteger(heaterTemperature) && heaterTemperature >= 135 && heaterTemperature <= 165 ? { heaterTemperature } : {}) });
     } finally {
       pending = false; paint();
@@ -426,9 +664,10 @@ function mountCalibrationPage({ form, labels, save, back, status, request, base,
     const locked = active || pending;
     for (const key of Object.keys(labels)) field(key).disabled = locked;
     flow.disabled = locked;
+    flowPlan.lock(locked);
     if (!locked) updateChoices();
     for (const control of [tarePitchers, tareMilk, ...captureButtons, captureMilk, pitcher]) control.disabled = locked || tarePending;
-    prepare.disabled = locked || !captured;
+    prepare.disabled = locked || !captured || !Number.isFinite(flowPlan.currentFlow());
     cancel.disabled = !active;
     save.disabled = locked;
     start.disabled = pending || !active || sessionPhase !== 'armed';
@@ -498,12 +737,13 @@ function mountCalibrationPage({ form, labels, save, back, status, request, base,
     scaleSocket?.close();
     if (active && token) fetch(base + '/calibration', { method: 'POST', keepalive: true, headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'cancel', token }) }).catch(() => {});
   });
+  flowPlan.attach(guided, review, flowLabel, () => { clearCapture(); zeroConfirmed = false; samples = []; appliedResult = false; elapsed.textContent = 'Steaming: 0.0 s'; paint(); });
   updatePitchers();
   connectScale();
   return { isActive: () => active || pending, flowChanged() { appliedResult = false; runStatus.textContent = 'Flow changed. Repeat calibration or enter a time measured at this flow.'; }, assertCanSave() { if (active || pending) throw new Error('Finish or cancel calibration before saving.'); } };
 }
 
-function settingsBrowser(resolveReturnUrl, mountCalibration, captureWeight, pitcherChoices, validateConfiguration) {
+function settingsBrowser(resolveReturnUrl, mountCalibration, captureWeight, pitcherChoices, validateConfiguration, mountFlowPlan) {
   const base = '/api/v1/plugins/calibrated-steam.reaplugin';
   const form = document.getElementById('settings');
   const status = document.getElementById('status');
@@ -513,7 +753,7 @@ function settingsBrowser(resolveReturnUrl, mountCalibration, captureWeight, pitc
   const summary = document.getElementById('configuration-summary');
   back.href = resolveReturnUrl(window.location.href, document.referrer);
   form.noValidate = true;
-  let schema = {}, guided = null, loaded = false, flowValue = null;
+  let schema = {}, guided = null, loaded = false, flowValue = null, flowPlan = null;
   const panels = {}, tabButtons = {}, labels = {}, fieldPanels = {};
   const make = (tag, text) => { const element = document.createElement(tag); if (text) element.textContent = text; return element; };
   const field = key => form.elements.namedItem(key);
@@ -530,6 +770,7 @@ function settingsBrowser(resolveReturnUrl, mountCalibration, captureWeight, pitc
   }
   function reveal(key) {
     showTab(fieldPanels[key] || (key === 'pitchers' ? 'pitchers' : 'general'));
+    if (fieldPanels[key] === 'calibration') flowPlan?.reveal(key);
     const details = field(key)?.closest('details');
     if (details) details.open = true;
     field(key)?.focus();
@@ -567,11 +808,12 @@ function settingsBrowser(resolveReturnUrl, mountCalibration, captureWeight, pitc
     const mirror = document.getElementById('calibration-flow');
     if (mirror) mirror.value = value;
     flowValue = String(value);
-    if (changed && !measured) {
+    if (changed && !measured && field('calibrationMode').value !== 'multiple') {
       field('referenceSeconds').value = '';
       status.textContent = 'Flow changed. Measure a new calibration time at this flow.';
       guided?.flowChanged();
     }
+    flowPlan?.flowChanged();
     updateChoices();
   }
   async function load() {
@@ -623,6 +865,10 @@ function settingsBrowser(resolveReturnUrl, mountCalibration, captureWeight, pitc
         }
         if (automaticFields) section.append(automaticFields);
       }
+      for (const key of ['calibrationMode', 'flowReadings']) {
+        const input = make('input'); input.type = 'hidden'; input.name = key; input.value = data.settings[key];
+        form.append(input); fieldPanels[key] = 'calibration';
+      }
       flowValue = String(field('referenceFlow').value);
       form.addEventListener('input', event => {
         if (event.target === field('referenceFlow')) syncFlow(event.target.value);
@@ -631,7 +877,8 @@ function settingsBrowser(resolveReturnUrl, mountCalibration, captureWeight, pitc
       form.addEventListener('change', updateChoices);
       updateChoices(); showTab('general'); loaded = true; save.disabled = false;
       status.textContent = data.ready ? 'Calibration is ready.' : 'Configure a pitcher and calibration before using Auto steam.';
-      guided = mountCalibration({ form, labels, save, back, status, request, base, field, updateChoices, syncFlow }, captureWeight);
+      flowPlan = mountFlowPlan({ form, labels, field, updateChoices, syncFlow }, readFlowReadings, proposedFlows, validFlowReading);
+      guided = mountCalibration({ form, labels, save, back, status, request, base, field, updateChoices, syncFlow, flowPlan }, captureWeight);
     } catch (error) { status.textContent = error.message; }
   }
   form.addEventListener('submit', async event => {
@@ -639,6 +886,7 @@ function settingsBrowser(resolveReturnUrl, mountCalibration, captureWeight, pitc
     save.disabled = true;
     try {
       guided?.assertCanSave();
+      flowPlan?.assertCanSave();
       const errors = validateConfiguration(values());
       if (errors.length) { reveal(errors[0].field); throw new Error(errors.map(error => error.message).join(' ')); }
       const options = { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(values()) };
@@ -646,6 +894,7 @@ function settingsBrowser(resolveReturnUrl, mountCalibration, captureWeight, pitc
       window.location.assign(back.href);
     } catch (error) {
       if (error.data?.errors?.length) reveal(error.data.errors[0].field);
+      if (error.field) reveal(error.field);
       status.textContent = error.message;
     } finally { save.disabled = guided?.isActive() || false; }
   });
@@ -657,7 +906,7 @@ function settingsPage() {
 <style>
 :root{color-scheme:light dark;--bg:#f3f5f9;--surface:#fff;--text:#26334a;--muted:#526179;--border:#ccd5e2;--accent:#385a92;--notice:#eef3fb;font:14px/1.45 system-ui,sans-serif}
 @media(prefers-color-scheme:dark){:root{--bg:#172132;--surface:#202b3e;--text:#e4eaf4;--muted:#b6c1d4;--border:#465166;--accent:#456faf;--notice:#2c3c55}}
-*{box-sizing:border-box}body{max-width:940px;margin:auto;padding:16px;background:var(--bg);color:var(--text)}header{display:flex;gap:14px;align-items:center;flex-wrap:wrap}h1{font-size:22px;font-weight:600;margin:0}h2{font-size:16px;margin:0}p{margin:10px 0}button,a,input,select{touch-action:manipulation}button,input,select{font:inherit;color:var(--text);background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px;min-height:44px}input,select{font-size:16px;min-width:0;width:100%}input[type=checkbox]{width:24px;height:24px;min-height:24px;accent-color:var(--accent)}button{cursor:pointer}button:disabled{opacity:.5;cursor:default}a{color:var(--accent)}#return-settings{display:inline-block;padding:10px 14px;min-height:44px;text-decoration:none;border:1px solid var(--border);border-radius:8px;background:var(--surface)}#configuration-summary{color:var(--muted);margin:12px 0}#settings-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}#settings-tabs [aria-selected=true],#save{background:var(--accent);color:#fff;border-color:transparent}[hidden]{display:none!important}fieldset{border:1px solid var(--border);border-radius:10px;background:var(--surface);padding:14px;margin:0 0 14px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}legend{font-size:16px;font-weight:600;padding:0 5px}.field{display:grid;gap:6px;align-content:start}.field label{font-weight:500}.field small{color:var(--muted)}.field-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;grid-column:1/-1}.pitcher-field{grid-column:1/-1;grid-template-columns:95px minmax(90px,1fr) auto;align-items:center;border-top:1px solid var(--border);padding-top:12px}.pitcher-field small{grid-column:2/-1}.pitcher-field .capture-button{grid-column:3;grid-row:1}.pitcher-field .capture-result{grid-column:1/-1;margin:0}.full-width{grid-column:1/-1}.scale-tools{display:flex;align-items:center;gap:12px;justify-content:space-between;flex-wrap:wrap}.scale-tools p{margin:0}.local-status{background:var(--notice);padding:9px 11px;border-radius:6px;overflow-wrap:anywhere}.guided-calibration{display:block}.calibration-actions{display:flex;flex-wrap:wrap;gap:10px;margin:12px 0}.calibration-timer{font-size:28px;font-variant-numeric:tabular-nums}.calibration-flow{max-width:220px;margin-bottom:12px}.guided-step{padding:12px 0;border-top:1px solid var(--border)}#status{min-height:1.5em;overflow-wrap:anywhere}.save-row{display:flex;align-items:center;gap:14px;justify-content:space-between;flex-wrap:wrap}footer{font-size:12px;color:var(--muted);margin-top:14px}details{margin-top:12px}summary{cursor:pointer;min-height:44px;padding:10px 0}
+*{box-sizing:border-box}body{max-width:940px;margin:auto;padding:16px;background:var(--bg);color:var(--text)}header{display:flex;gap:14px;align-items:center;flex-wrap:wrap}h1{font-size:22px;font-weight:600;margin:0}h2{font-size:16px;margin:0}p{margin:10px 0}button,a,input,select{touch-action:manipulation}button,input,select{font:inherit;color:var(--text);background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px;min-height:44px}input,select{font-size:16px;min-width:0;width:100%}input[type=checkbox]{width:24px;height:24px;min-height:24px;accent-color:var(--accent)}button{cursor:pointer}button:disabled{opacity:.5;cursor:default}a{color:var(--accent)}#return-settings{display:inline-block;padding:10px 14px;min-height:44px;text-decoration:none;border:1px solid var(--border);border-radius:8px;background:var(--surface)}#configuration-summary{color:var(--muted);margin:12px 0}#settings-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}#settings-tabs [aria-selected=true],button[aria-pressed=true],#save{background:var(--accent);color:#fff;border-color:transparent}[hidden]{display:none!important}fieldset{border:1px solid var(--border);border-radius:10px;background:var(--surface);padding:14px;margin:0 0 14px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}legend{font-size:16px;font-weight:600;padding:0 5px}.field{display:grid;gap:6px;align-content:start}.field label{font-weight:500}.field small{color:var(--muted)}.field-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;grid-column:1/-1}.pitcher-field{grid-column:1/-1;grid-template-columns:95px minmax(90px,1fr) auto;align-items:center;border-top:1px solid var(--border);padding-top:12px}.pitcher-field small{grid-column:2/-1}.pitcher-field .capture-button{grid-column:3;grid-row:1}.pitcher-field .capture-result{grid-column:1/-1;margin:0}.full-width{grid-column:1/-1}.scale-tools{display:flex;align-items:center;gap:12px;justify-content:space-between;flex-wrap:wrap}.scale-tools p{margin:0}.local-status{background:var(--notice);padding:9px 11px;border-radius:6px;overflow-wrap:anywhere}.guided-calibration{display:block}.calibration-actions{display:flex;flex-wrap:wrap;gap:10px;margin:12px 0}.calibration-timer{font-size:28px;font-variant-numeric:tabular-nums}.calibration-flow{max-width:220px;margin-bottom:12px}.guided-step{padding:12px 0;border-top:1px solid var(--border)}#status{min-height:1.5em;overflow-wrap:anywhere}.save-row{display:flex;align-items:center;gap:14px;justify-content:space-between;flex-wrap:wrap}footer{font-size:12px;color:var(--muted);margin-top:14px}details{margin-top:12px}summary{cursor:pointer;min-height:44px;padding:10px 0}
 @media(max-width:480px){body{padding:12px}fieldset,.field-grid{grid-template-columns:1fr}.pitcher-field{grid-template-columns:65px minmax(60px,1fr)}.pitcher-field .capture-button{grid-column:2;grid-row:auto}.pitcher-field small{grid-column:1/-1}}
 </style></head><body>
 <header><a id="return-settings" href="/api/v1/plugins/settings.reaplugin/ui">← Settings</a><h1>Auto Steam Calculator</h1></header>
@@ -666,7 +915,7 @@ function settingsPage() {
 <form id="settings" novalidate></form>
 <div class="save-row"><p id="status" role="status" aria-live="polite">Loading settings…</p><button id="save" form="settings" type="submit" disabled>Save calibration</button></div>
 <footer>Calculation and automatic pitcher detection inspired by <a href="https://github.com/Damian-AU/DSx2">Damian / Damian-AU’s DSx2</a>. Implementation for Decaid by pponce.</footer>
-<script>{${configuredPitchers.toString()}\n${availablePitchers.toString()}\n${validateSettings.toString()}\n(${settingsBrowser.toString()})(${settingsReturnUrl.toString()},${mountCalibrationPage.toString()},${captureScaleWeight.toString()},availablePitchers,validateSettings);}</script></body></html>`;
+<script>{${readFlowReadings.toString()}\n${validFlowReading.toString()}\n${validateFlowCalibration.toString()}\n${proposedFlows.toString()}\n${configuredPitchers.toString()}\n${availablePitchers.toString()}\n${validateSettings.toString()}\n(${settingsBrowser.toString()})(${settingsReturnUrl.toString()},${mountCalibrationPage.toString()},${captureScaleWeight.toString()},availablePitchers,validateSettings,${mountFlowCalibrationPage.toString()});}</script></body></html>`;
 }
 
 globalThis.createPlugin = function createPlugin() {
@@ -752,7 +1001,7 @@ globalThis.createPlugin = function createPlugin() {
       if (!methods[endpoint]) return json(404, { code: 'not_found', message: 'Unknown endpoint.' });
       if (method !== methods[endpoint]) return json(405, { code: 'method_not_allowed', message: `Use ${methods[endpoint]}.` });
       if (endpoint === 'calibration') return calibrationRequest(body);
-      if (endpoint === 'status') return json(200, { apiVersion: 3, version: MANIFEST.version, calibrationActive: calibrationActive(), ready: validateSettings(settings).length === 0, settings, availablePitchers: availablePitchers(settings), errors: validateSettings(settings), schema: MANIFEST.settings });
+      if (endpoint === 'status') return json(200, { apiVersion: 3, version: MANIFEST.version, calibrationActive: calibrationActive(), ready: validateSettings(settings).length === 0, settings, flowCalibration: flowCalibration(settings), availablePitchers: availablePitchers(settings), errors: validateSettings(settings), schema: MANIFEST.settings });
       if (endpoint === 'ui') return { status: 200, headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' }, body: settingsPage() };
       if (endpoint === 'validate') {
         if (!body || typeof body !== 'object' || Array.isArray(body)) return json(400, { code: 'invalid_request', message: 'Settings must be an object.' });

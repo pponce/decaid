@@ -44,6 +44,7 @@ async function page(settings = partial, failSave = false, guidedRun = false) {
   const navigations = [];
   const calls = [];
   const calibrationCalls = [];
+  const savedSettings = [];
   let session = null;
   const returnTo = 'http://localhost:43210/?page=settings';
   const document = { referrer: '', getElementById: id => ids[id], createElement: tag => new Element(tag) };
@@ -52,14 +53,15 @@ async function page(settings = partial, failSave = false, guidedRun = false) {
     calls.push(endpoint);
     if (endpoint === 'calibration' && guidedRun) {
       const body = JSON.parse(options.body); calibrationCalls.push(body);
-      if (body.action === 'begin') session = { active: true, phase: 'armed', token: 'page-test', seconds: 0, result: null };
+      if (body.action === 'begin') session = { active: true, phase: 'armed', token: 'page-test', seconds: 0, result: null, measurement: body };
       if (body.action === 'start') session = { ...session, phase: 'steaming', seconds: 0 };
-      if (body.action === 'stop') session = { ...session, active: false, phase: 'complete', seconds: 25, result: { milkGrams: 160, flow: 1.5, seconds: 25 } };
+      if (body.action === 'stop') session = { ...session, active: false, phase: 'complete', seconds: 25, result: { milkGrams: 160, flow: session.measurement.flow, seconds: 25 } };
       if (body.action === 'cancel') session = { ...session, active: false, phase: 'failed', message: 'Cancelled.', result: null };
       return { ok: true, text: async () => JSON.stringify(session) };
     }
     if (endpoint === 'tare') return { ok: true, text: async () => '' };
     if (endpoint === 'settings') {
+      savedSettings.push(JSON.parse(options.body));
       if (failSave) throw new Error('Save failed');
       return { ok: true, text: async () => '{}'  };
     }
@@ -74,7 +76,7 @@ async function page(settings = partial, failSave = false, guidedRun = false) {
   vm.runInContext(body.match(/<script>([\s\S]*)<\/script>/)[1], context);
   await new Promise(resolve => setImmediate(resolve));
   const all = element => [element, ...element.children.flatMap(all)];
-  return { fields, ids, calls, navigations, returnTo, calibrationCalls,
+  return { fields, ids, calls, navigations, returnTo, calibrationCalls, savedSettings,
     buttons: text => all(ids.settings).filter(element => element.tag === 'button' && element.textContent === text),
     scale: weight => { time += 300; socket.onmessage({ data: JSON.stringify({ weight }) }); },
     change: () => ids.settings.handlers.change(), submit: () => ids.settings.handlers.submit({ preventDefault() {} }) };
@@ -224,4 +226,78 @@ test('a blocked milk capture explains the missing tare beside its own button', a
   const message = capture.parent.parent.children.at(-1);
   assert.match(message.textContent, /stable zero/);
   assert.equal(p.buttons('Prepare calibration')[0].disabled, true);
+});
+
+test('multiple-flow manual wizard requires all readings and saves the full draft once', async () => {
+  const p = await page();
+  await p.ids['flow-mode-multiple'].handlers.click();
+  assert.equal(p.fields.calibrationMode.value, 'multiple');
+  assert.deepEqual(JSON.parse(p.fields.flowReadings.value).map(r => r.flow), [0.4, 1.5, 2.5]);
+  await p.submit();
+  assert.equal(p.savedSettings.length, 0);
+  assert.equal(p.ids['panel-calibration'].hidden, false);
+  for (const seconds of [40, 20, 12]) {
+    p.fields.referenceMilkGrams.value = '200'; p.fields.referenceSeconds.value = seconds;
+    await p.ids['flow-use-reading'].handlers.click();
+  }
+  assert.equal(p.ids['flow-review'].hidden, false);
+  await p.submit();
+  assert.equal(p.savedSettings.length, 1);
+  assert.deepEqual(JSON.parse(p.savedSettings[0].flowReadings), [
+    { flow: 0.4, milkGrams: 200, seconds: 40 }, { flow: 1.5, milkGrams: 200, seconds: 20 }, { flow: 2.5, milkGrams: 200, seconds: 12 },
+  ]);
+});
+
+test('guided multiple readings prepare the machine at each planned flow and require fresh captures', async () => {
+  const p = await page(partial, false, true);
+  await p.ids['flow-mode-multiple'].handlers.click();
+  await p.ids['flow-method-guided'].handlers.click();
+  for (const expected of [0.4, 1.5, 2.5]) {
+    assert.equal(p.buttons('Prepare calibration')[0].disabled, true);
+    await p.buttons('Tare empty scale')[1].handlers.click();
+    for (let i = 0; i < 12; i++) p.scale(0);
+    for (let i = 0; i < 12; i++) p.scale(380);
+    await p.buttons('Capture pitcher + milk')[0].handlers.click();
+    await p.buttons('Prepare calibration')[0].handlers.click();
+    assert.equal(p.calibrationCalls.at(-1).flow, expected);
+    assert.equal(p.ids['flow-reading-count'].disabled, true);
+    assert.equal(p.ids['flow-mode-single'].disabled, true);
+    await p.buttons('Start steam')[0].handlers.click();
+    await p.buttons('Stop steam')[0].handlers.click();
+    await p.ids['flow-use-reading'].handlers.click();
+  }
+  assert.equal(p.fields.referenceFlow.value, '1.5');
+  await p.submit();
+  assert.deepEqual(JSON.parse(p.savedSettings[0].flowReadings).map(r => r.flow), [0.4, 1.5, 2.5]);
+});
+
+test('changing default flow preserves multiple measurements and editing a reading requires use again', async () => {
+  const readings = [{ flow: 0.4, milkGrams: 200, seconds: 40 }, { flow: 2.5, milkGrams: 200, seconds: 10 }];
+  const p = await page({ ...partial, calibrationMode: 'multiple', flowReadings: JSON.stringify(readings) });
+  assert.equal(p.fields.referenceSeconds.value, '40');
+  p.ids['calibration-flow'].value = '1.0'; await p.ids['calibration-flow'].handlers.input();
+  assert.equal(p.fields.referenceSeconds.value, '40');
+  assert.deepEqual(JSON.parse(p.fields.flowReadings.value), readings);
+  p.fields.referenceSeconds.value = '45';
+  await p.ids.settings.handlers.input({ target: p.fields.referenceSeconds });
+  await p.submit();
+  assert.equal(p.savedSettings.length, 0);
+  await p.ids['flow-use-reading'].handlers.click();
+  await p.submit();
+  assert.equal(p.savedSettings[0].referenceFlow, 1);
+  assert.equal(JSON.parse(p.savedSettings[0].flowReadings)[0].seconds, 45);
+});
+
+test('invalid planned range cannot reuse old points or save until corrected', async () => {
+  const p = await page(); await p.ids['flow-mode-multiple'].handlers.click();
+  p.ids['flow-minimum'].value = '0.3'; await p.ids['flow-minimum'].handlers.change();
+  assert.equal(p.ids['flow-use-reading'].disabled, true);
+  for (let i = 0; i < 3; i++) {
+    p.fields.referenceMilkGrams.value = '200'; p.fields.referenceSeconds.value = '30';
+    await p.ids['flow-use-reading'].handlers.click();
+  }
+  await p.submit(); assert.equal(p.savedSettings.length, 0);
+  p.ids['flow-minimum'].value = '0.4'; await p.ids['flow-minimum'].handlers.change();
+  assert.equal(p.ids['flow-use-reading'].disabled, false);
+  assert.equal(p.fields.referenceSeconds.value, '');
 });

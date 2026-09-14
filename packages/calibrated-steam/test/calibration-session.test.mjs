@@ -8,7 +8,7 @@ function fixture() {
   const original = { duration: 0, flow: 0.8, targetTemperature: 0, stopAtTemperature: 60 };
   const writes = [], commands = [];
   const session = createCalibrationSession({ now: () => time,
-    readWorkflow: async () => ({ steamSettings: original }),
+    readWorkflow: async () => ({ steamSettings: writes.at(-1) ?? original }),
     writeSteam: async value => writes.push({ ...value }),
     requestState: async value => commands.push(value),
   });
@@ -108,13 +108,13 @@ test('cancel during a pending start sends stop again after start settles and wai
   let now = 10000, release;
   const commands = [], writes = [];
   const s = createCalibrationSession({ now: () => now,
-    readWorkflow: async () => ({ steamSettings: { duration: 30, flow: 1, targetTemperature: 145 } }),
+    readWorkflow: async () => ({ steamSettings: writes.at(-1) ?? { duration: 30, flow: 1, targetTemperature: 145 } }),
     writeSteam: async value => writes.push(value),
     requestState: async state => { commands.push(state); if (state === 'steam') await new Promise(resolve => { release = resolve; }); },
   });
   const frame = state => { now += 100; s.observe({ timestamp: new Date(now).toISOString(), state: { state, substate: 'pouring' } }); };
   frame('idle'); await s.begin({ milkGrams: 150, pitcher: 'small', pitcherGrams: 150, flow: 0.4 });
-  const starting = s.start(); await s.cancel();
+  const starting = s.start(); await new Promise(resolve => setImmediate(resolve)); await s.cancel();
   assert.equal(writes.length, 1);
   release(); await starting; await s.tick();
   assert.deepEqual(commands, ['steam', 'idle', 'idle']);
@@ -135,4 +135,26 @@ test('a preparation write failure restores even if the failed write partly reach
   await s.tick();
   assert.deepEqual(writes.map(w => w.duration), [255, 30]);
   assert.equal(s.snapshot().result, null);
+});
+
+test('Start waits for the flow write and refuses a subsequently changed calibration flow', async () => {
+  let release;
+  let steamSettings = { duration: 30, flow: 1, targetTemperature: 145, stopAtTemperature: 0 };
+  const commands = [];
+  const session = createCalibrationSession({ now: () => 10000,
+    readWorkflow: async () => ({ steamSettings }),
+    writeSteam: async value => { await new Promise(resolve => { release = resolve; }); steamSettings = value; },
+    requestState: async value => commands.push(value),
+  });
+  session.observe({ timestamp: new Date(10000).toISOString(), state: { state: 'idle' } });
+  const preparing = session.begin({ milkGrams: 200, pitcher: 'small', pitcherGrams: 150, flow: 2.5 });
+  await new Promise(resolve => setImmediate(resolve));
+  await assert.rejects(session.start(), /Prepare/);
+  assert.equal(session.snapshot().phase, 'preparing');
+  release(); await preparing;
+  assert.equal(steamSettings.flow, 2.5);
+  assert.equal(session.snapshot().phase, 'armed');
+  steamSettings = { ...steamSettings, flow: 0.4 };
+  await assert.rejects(session.start(), /settings changed/);
+  assert.equal(commands.includes('steam'), false);
 });

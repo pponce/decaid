@@ -13,11 +13,13 @@ from **Extensions > Plugins > Open**. Both entry points provide a return address
 **Return to settings** leaves without saving, and a successful **Save calibration**
 returns to the calling settings page. Validation or save errors keep the form open.
 
-Version 0.6.0 uses compact **General**, **Pitchers & Auto**, and **Calibration**
+Version 0.7.0 uses compact **General**, **Pitchers & Auto**, and **Calibration**
 tabs. General contains scale weight mode, starting pitcher selection and steam
 flow. The summary separates configured choices from calibration readiness and
 updates as the draft changes. Save is required to persist changes. Both Flow
-inputs edit the same `referenceFlow`; changing flow clears the old measured time.
+inputs edit the same `referenceFlow`. In Single flow, changing it clears the old
+measured time. In Multiple flows, it is the default Auto flow; changing it within
+the measured range preserves all readings.
 
 Pitchers & Auto places empty-scale tare beside the pitcher rows. Each **Set from
 scale** button fills its own field without focusing it first, and reports success
@@ -36,13 +38,16 @@ tab and manual-values section containing the first invalid setting.
 3. Choose a starting selection from the configured sizes (and Auto, if ready).
    Streamline remembers subsequent choices separately and falls back to the saved
    starting choice if the previously selected pitcher is removed.
-4. Set your calibration flow, then follow **Guided calibration** on this page:
+4. Choose **Single flow** or **Multiple flows** in Calibration (details below),
+   then follow **Guided calibration** for each reading:
    tare the empty scale, choose a configured pitcher, place it with cold milk on
    the scale, and **Capture pitcher + milk**. Review the milk-only weight,
    **Prepare calibration**, then **Start steam**. Stop at your preferred milk
    temperature using **Stop steam** or the machine control. Physical start also
    works after preparation. The page fills the measured weight, time and flow.
-   Alternatively, enter values measured using normal manual steam controls.
+   Alternatively, choose **Enter measured time** for each reading and enter values
+   measured using normal manual steam controls. Select **Use reading & next**
+   between readings, then review the completed set.
 5. Save. Use similar milk, starting temperature and technique on later runs.
 
 Only configured sizes appear in the steam presets. With no setup, top-level Auto
@@ -57,7 +62,8 @@ an already-selected preset recalculates; no preview dialog or Use time button is
 involved. Success shows pitcher, milk mass and seconds; start steam normally afterward.
 
 Auto flow is configurable from **0.4 to 2.5 ml/s**, with **0.4 ml/s** as the
-default. Measure the calibration time at this flow; recalibrate if it changes.
+default. Single-flow calibration fixes Auto at that measured flow. Multiple-flow
+calibration permits adjustment only between its lowest and highest measured flows.
 
 Auto applies the calibration flow. After calculation, Streamline restores its
 normal heater setting from before Auto was entered (or its existing remembered
@@ -76,12 +82,46 @@ The skin saves the previous manual duration, flow, heater target and probe-stop
 setting before entering Auto and restores them on exit or plugin disable. A disable
 during steaming defers restoration until idle. Auto values do not replace manual
 preferences or profile values. While Auto is active, use pitcher presets to set the
-time; manual number editors and plus/minus are inactive.
+time. Manual number editors stay inactive in Auto. Single-flow Auto hides − / +.
+Multiple-flow Auto shows them for flow adjustment in 0.1 ml/s steps within the
+calibrated range, while the machine is idle. Changing flow resets time to Off; tap
+the pitcher again to calculate from the current scale weight. The selected Auto
+flow is remembered separately from manual flow and resets to the default when
+calibration settings change. Normal Flow and Time modes keep − / +.
 
 **Gross** means pitcher plus milk: start with the empty scale at zero and do not tare
 the pitcher. **Tared** means milk only: no pitcher weight is subtracted and automatic pitcher
 identification is unavailable. The software cannot detect a physical tare button
 press; the selected mode must match the scale display.
+
+## Single and multiple flow calibration
+
+Single flow retains the original measured milk weight, time and fixed flow.
+Existing installations upgrade to this mode without losing their calibration.
+
+Multiple flows asks for a minimum and maximum between 0.4 and 2.5 ml/s and **2, 3
+(recommended), or 4 readings**. Two uses both endpoints; three adds a midpoint;
+four adds two evenly spaced interior points, rounded to 0.1 ml/s. A range must
+allow distinct points at least 0.1 ml/s apart. For 0.4–2.5 ml/s, the four points
+are 0.4, 1.1, 1.8 and 2.5 ml/s. The default Auto flow must lie within that range.
+
+Set a target milk weight for all readings. For each point, use the same pitcher,
+milk starting temperature, target temperature, heater setting and technique. Use
+fresh milk for each run, not milk already heated by the previous reading. Record
+the actual milk weight if it differs slightly from the target.
+
+Each point offers manual time entry or the existing guided calibration. The
+reading heading shows its required flow. Guided Prepare applies that flow, not
+the default Auto flow. Start remains unavailable until preparation completes and
+rechecks the workflow's flow, duration and probe-stop settings before requesting
+steam. No successful result is returned until prior steam settings are restored.
+
+Select **Use reading & next** after each measurement, then review the complete
+set. **Redo** returns to a reading. Changing the planned range/count clears the
+draft readings; editing a captured reading requires using it again. Save stores
+the complete set through one settings request. Until Save, the previous saved
+calibration remains active; leaving without saving discards the draft. The page
+does not save invented readings or sample times.
 
 ## Guided calibration details
 
@@ -94,15 +134,16 @@ weight, including when everyday calculation uses Tared mode. Auto inference is
 not used for calibration. Initial milk weight is frozen before steam starts;
 removing the pitcher from the scale does not change it.
 
-Preparation applies the form's flow (0.4–2.5 ml/s), the existing normal heater
+Preparation applies the current reading's flow (0.4–2.5 ml/s), the existing normal heater
 setting and a temporary duration of 255 seconds, with probe stopping disabled.
 255 is the existing machine timer ceiling, not a new user setting. The user stops
 at their desired temperature. The measured counter follows machine snapshot
 `pouring` time, excluding warm-up, and waits for confirmed idle before completing.
 Runs reaching the timer ceiling, paused runs and interrupted telemetry are not
 accepted as calibration. After review, Save stores values and returns to settings.
-Changing flow after a guided run clears its measured time and requires recalibration
-or a manually measured replacement. Capture fresh milk to try again.
+Changing a single calibration flow clears its measured time and requires a new
+measurement. Changing a multiple calibration default inside the measured range
+does not discard readings. Capture fresh milk to repeat any guided reading.
 
 The plugin owns preparation and restoration; the page renews its session lease.
 Return to settings cancels an active run and waits for restoration before navigating.
@@ -125,7 +166,16 @@ The formula and pitcher-selection heuristic are inspired by Damian / Damian-AU's
 `code/procs_vars.tcl`. This is a new JavaScript implementation; it does not copy
 DSx2's Tcl UI or artwork. Damian is credited in the manifest and settings UI.
 
-`seconds = round(referenceSeconds × milkGrams / referenceMilkGrams)`
+Single flow: `seconds = round(referenceSeconds × milkGrams / referenceMilkGrams)`.
+
+Multiple flows normalize each reading to `rate = seconds / milkGrams`. For a
+requested flow between adjacent measured flows `f0` and `f1`, let
+`p = (flow - f0) / (f1 - f0)`. Then
+`seconds = round(milkGrams × ((1-p) × rate0 + p × rate1))`.
+Measured endpoints retain their measured rate. There is no curve fitting or
+extrapolation beyond the measured range. This extension to the original ratio
+is an empirical estimate; it still assumes time scales approximately with milk
+mass. Heater-temperature compensation and pitcher inference are unchanged.
 
 For gross weight `W`, empty small/medium pitcher weights `S`/`M`, and usual
 single-drink milk mass `D`:
@@ -183,6 +233,32 @@ tries a same-host referrer, then falls back to Decaid's settings plugin. The plu
 has no dependency on Streamline routes. Streamline supplies its `?page=settings`
 URL and restores the selected settings category from its existing navigation state.
 
+
+### Multiple-flow capability (plugin v0.7.0)
+
+Calculator API remains v3. Status adds `flowCalibration`, either null for invalid
+calibration data or `{mode, adjustable, minimum, maximum, defaultFlow, readings}`.
+Each reading is `{flow, milkGrams, seconds}`. Also require `ready`; valid flow
+readings alone do not establish valid pitcher settings. Older plugin versions
+lack this capability and must be treated as fixed-flow.
+
+Persist `calibrationMode` (`single` by default, or `multiple`) and `flowReadings`
+(a JSON string containing the ordered 2–4 reading objects). A string is used
+because the existing plugin setting schema supports primitive types. Custom
+skins should use the shared settings page instead of exposing raw JSON. The
+legacy `referenceMilkGrams` and `referenceSeconds` remain the single calibration;
+in multiple mode the readings are authoritative. `referenceFlow` is the shared
+fixed/default flow, with a default of 0.4. Changing that default does not mutate
+multiple readings.
+
+A `calculate` body may include optional numeric `flow`. If omitted, the plugin
+uses `referenceFlow`, preserving older skins' default-flow behavior. Single mode
+requires its fixed flow. Multiple mode rejects values outside measured bounds
+with `flow_out_of_range`; invalid calibration returns `configuration_required`.
+Pass the selected flow on every preview and revalidation, compare the returned
+flow as well as duration/revision, and apply that exact duration/flow pair. A flow
+change invalidates an armed calculation. Never retain its previous duration or
+reuse a prior milk measurement silently. Keep manual steam preferences separate.
 
 ### Reusing guided calibration in another skin
 

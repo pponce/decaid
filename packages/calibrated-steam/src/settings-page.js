@@ -1,4 +1,4 @@
-function settingsBrowser(resolveReturnUrl, mountCalibration, captureWeight, pitcherChoices, validateConfiguration) {
+function settingsBrowser(resolveReturnUrl, mountCalibration, captureWeight, pitcherChoices, validateConfiguration, mountFlowPlan) {
   const base = '/api/v1/plugins/calibrated-steam.reaplugin';
   const form = document.getElementById('settings');
   const status = document.getElementById('status');
@@ -8,7 +8,7 @@ function settingsBrowser(resolveReturnUrl, mountCalibration, captureWeight, pitc
   const summary = document.getElementById('configuration-summary');
   back.href = resolveReturnUrl(window.location.href, document.referrer);
   form.noValidate = true;
-  let schema = {}, guided = null, loaded = false, flowValue = null;
+  let schema = {}, guided = null, loaded = false, flowValue = null, flowPlan = null;
   const panels = {}, tabButtons = {}, labels = {}, fieldPanels = {};
   const make = (tag, text) => { const element = document.createElement(tag); if (text) element.textContent = text; return element; };
   const field = key => form.elements.namedItem(key);
@@ -25,6 +25,7 @@ function settingsBrowser(resolveReturnUrl, mountCalibration, captureWeight, pitc
   }
   function reveal(key) {
     showTab(fieldPanels[key] || (key === 'pitchers' ? 'pitchers' : 'general'));
+    if (fieldPanels[key] === 'calibration') flowPlan?.reveal(key);
     const details = field(key)?.closest('details');
     if (details) details.open = true;
     field(key)?.focus();
@@ -62,11 +63,12 @@ function settingsBrowser(resolveReturnUrl, mountCalibration, captureWeight, pitc
     const mirror = document.getElementById('calibration-flow');
     if (mirror) mirror.value = value;
     flowValue = String(value);
-    if (changed && !measured) {
+    if (changed && !measured && field('calibrationMode').value !== 'multiple') {
       field('referenceSeconds').value = '';
       status.textContent = 'Flow changed. Measure a new calibration time at this flow.';
       guided?.flowChanged();
     }
+    flowPlan?.flowChanged();
     updateChoices();
   }
   async function load() {
@@ -118,6 +120,10 @@ function settingsBrowser(resolveReturnUrl, mountCalibration, captureWeight, pitc
         }
         if (automaticFields) section.append(automaticFields);
       }
+      for (const key of ['calibrationMode', 'flowReadings']) {
+        const input = make('input'); input.type = 'hidden'; input.name = key; input.value = data.settings[key];
+        form.append(input); fieldPanels[key] = 'calibration';
+      }
       flowValue = String(field('referenceFlow').value);
       form.addEventListener('input', event => {
         if (event.target === field('referenceFlow')) syncFlow(event.target.value);
@@ -126,7 +132,8 @@ function settingsBrowser(resolveReturnUrl, mountCalibration, captureWeight, pitc
       form.addEventListener('change', updateChoices);
       updateChoices(); showTab('general'); loaded = true; save.disabled = false;
       status.textContent = data.ready ? 'Calibration is ready.' : 'Configure a pitcher and calibration before using Auto steam.';
-      guided = mountCalibration({ form, labels, save, back, status, request, base, field, updateChoices, syncFlow }, captureWeight);
+      flowPlan = mountFlowPlan({ form, labels, field, updateChoices, syncFlow }, readFlowReadings, proposedFlows, validFlowReading);
+      guided = mountCalibration({ form, labels, save, back, status, request, base, field, updateChoices, syncFlow, flowPlan }, captureWeight);
     } catch (error) { status.textContent = error.message; }
   }
   form.addEventListener('submit', async event => {
@@ -134,6 +141,7 @@ function settingsBrowser(resolveReturnUrl, mountCalibration, captureWeight, pitc
     save.disabled = true;
     try {
       guided?.assertCanSave();
+      flowPlan?.assertCanSave();
       const errors = validateConfiguration(values());
       if (errors.length) { reveal(errors[0].field); throw new Error(errors.map(error => error.message).join(' ')); }
       const options = { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(values()) };
@@ -141,6 +149,7 @@ function settingsBrowser(resolveReturnUrl, mountCalibration, captureWeight, pitc
       window.location.assign(back.href);
     } catch (error) {
       if (error.data?.errors?.length) reveal(error.data.errors[0].field);
+      if (error.field) reveal(error.field);
       status.textContent = error.message;
     } finally { save.disabled = guided?.isActive() || false; }
   });
@@ -152,7 +161,7 @@ function settingsPage() {
 <style>
 :root{color-scheme:light dark;--bg:#f3f5f9;--surface:#fff;--text:#26334a;--muted:#526179;--border:#ccd5e2;--accent:#385a92;--notice:#eef3fb;font:14px/1.45 system-ui,sans-serif}
 @media(prefers-color-scheme:dark){:root{--bg:#172132;--surface:#202b3e;--text:#e4eaf4;--muted:#b6c1d4;--border:#465166;--accent:#456faf;--notice:#2c3c55}}
-*{box-sizing:border-box}body{max-width:940px;margin:auto;padding:16px;background:var(--bg);color:var(--text)}header{display:flex;gap:14px;align-items:center;flex-wrap:wrap}h1{font-size:22px;font-weight:600;margin:0}h2{font-size:16px;margin:0}p{margin:10px 0}button,a,input,select{touch-action:manipulation}button,input,select{font:inherit;color:var(--text);background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px;min-height:44px}input,select{font-size:16px;min-width:0;width:100%}input[type=checkbox]{width:24px;height:24px;min-height:24px;accent-color:var(--accent)}button{cursor:pointer}button:disabled{opacity:.5;cursor:default}a{color:var(--accent)}#return-settings{display:inline-block;padding:10px 14px;min-height:44px;text-decoration:none;border:1px solid var(--border);border-radius:8px;background:var(--surface)}#configuration-summary{color:var(--muted);margin:12px 0}#settings-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}#settings-tabs [aria-selected=true],#save{background:var(--accent);color:#fff;border-color:transparent}[hidden]{display:none!important}fieldset{border:1px solid var(--border);border-radius:10px;background:var(--surface);padding:14px;margin:0 0 14px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}legend{font-size:16px;font-weight:600;padding:0 5px}.field{display:grid;gap:6px;align-content:start}.field label{font-weight:500}.field small{color:var(--muted)}.field-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;grid-column:1/-1}.pitcher-field{grid-column:1/-1;grid-template-columns:95px minmax(90px,1fr) auto;align-items:center;border-top:1px solid var(--border);padding-top:12px}.pitcher-field small{grid-column:2/-1}.pitcher-field .capture-button{grid-column:3;grid-row:1}.pitcher-field .capture-result{grid-column:1/-1;margin:0}.full-width{grid-column:1/-1}.scale-tools{display:flex;align-items:center;gap:12px;justify-content:space-between;flex-wrap:wrap}.scale-tools p{margin:0}.local-status{background:var(--notice);padding:9px 11px;border-radius:6px;overflow-wrap:anywhere}.guided-calibration{display:block}.calibration-actions{display:flex;flex-wrap:wrap;gap:10px;margin:12px 0}.calibration-timer{font-size:28px;font-variant-numeric:tabular-nums}.calibration-flow{max-width:220px;margin-bottom:12px}.guided-step{padding:12px 0;border-top:1px solid var(--border)}#status{min-height:1.5em;overflow-wrap:anywhere}.save-row{display:flex;align-items:center;gap:14px;justify-content:space-between;flex-wrap:wrap}footer{font-size:12px;color:var(--muted);margin-top:14px}details{margin-top:12px}summary{cursor:pointer;min-height:44px;padding:10px 0}
+*{box-sizing:border-box}body{max-width:940px;margin:auto;padding:16px;background:var(--bg);color:var(--text)}header{display:flex;gap:14px;align-items:center;flex-wrap:wrap}h1{font-size:22px;font-weight:600;margin:0}h2{font-size:16px;margin:0}p{margin:10px 0}button,a,input,select{touch-action:manipulation}button,input,select{font:inherit;color:var(--text);background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px;min-height:44px}input,select{font-size:16px;min-width:0;width:100%}input[type=checkbox]{width:24px;height:24px;min-height:24px;accent-color:var(--accent)}button{cursor:pointer}button:disabled{opacity:.5;cursor:default}a{color:var(--accent)}#return-settings{display:inline-block;padding:10px 14px;min-height:44px;text-decoration:none;border:1px solid var(--border);border-radius:8px;background:var(--surface)}#configuration-summary{color:var(--muted);margin:12px 0}#settings-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}#settings-tabs [aria-selected=true],button[aria-pressed=true],#save{background:var(--accent);color:#fff;border-color:transparent}[hidden]{display:none!important}fieldset{border:1px solid var(--border);border-radius:10px;background:var(--surface);padding:14px;margin:0 0 14px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}legend{font-size:16px;font-weight:600;padding:0 5px}.field{display:grid;gap:6px;align-content:start}.field label{font-weight:500}.field small{color:var(--muted)}.field-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;grid-column:1/-1}.pitcher-field{grid-column:1/-1;grid-template-columns:95px minmax(90px,1fr) auto;align-items:center;border-top:1px solid var(--border);padding-top:12px}.pitcher-field small{grid-column:2/-1}.pitcher-field .capture-button{grid-column:3;grid-row:1}.pitcher-field .capture-result{grid-column:1/-1;margin:0}.full-width{grid-column:1/-1}.scale-tools{display:flex;align-items:center;gap:12px;justify-content:space-between;flex-wrap:wrap}.scale-tools p{margin:0}.local-status{background:var(--notice);padding:9px 11px;border-radius:6px;overflow-wrap:anywhere}.guided-calibration{display:block}.calibration-actions{display:flex;flex-wrap:wrap;gap:10px;margin:12px 0}.calibration-timer{font-size:28px;font-variant-numeric:tabular-nums}.calibration-flow{max-width:220px;margin-bottom:12px}.guided-step{padding:12px 0;border-top:1px solid var(--border)}#status{min-height:1.5em;overflow-wrap:anywhere}.save-row{display:flex;align-items:center;gap:14px;justify-content:space-between;flex-wrap:wrap}footer{font-size:12px;color:var(--muted);margin-top:14px}details{margin-top:12px}summary{cursor:pointer;min-height:44px;padding:10px 0}
 @media(max-width:480px){body{padding:12px}fieldset,.field-grid{grid-template-columns:1fr}.pitcher-field{grid-template-columns:65px minmax(60px,1fr)}.pitcher-field .capture-button{grid-column:2;grid-row:auto}.pitcher-field small{grid-column:1/-1}}
 </style></head><body>
 <header><a id="return-settings" href="/api/v1/plugins/settings.reaplugin/ui">← Settings</a><h1>Auto Steam Calculator</h1></header>
@@ -161,5 +170,5 @@ function settingsPage() {
 <form id="settings" novalidate></form>
 <div class="save-row"><p id="status" role="status" aria-live="polite">Loading settings…</p><button id="save" form="settings" type="submit" disabled>Save calibration</button></div>
 <footer>Calculation and automatic pitcher detection inspired by <a href="https://github.com/Damian-AU/DSx2">Damian / Damian-AU’s DSx2</a>. Implementation for Decaid by pponce.</footer>
-<script>{${configuredPitchers.toString()}\n${availablePitchers.toString()}\n${validateSettings.toString()}\n(${settingsBrowser.toString()})(${settingsReturnUrl.toString()},${mountCalibrationPage.toString()},${captureScaleWeight.toString()},availablePitchers,validateSettings);}</script></body></html>`;
+<script>{${readFlowReadings.toString()}\n${validFlowReading.toString()}\n${validateFlowCalibration.toString()}\n${proposedFlows.toString()}\n${configuredPitchers.toString()}\n${availablePitchers.toString()}\n${validateSettings.toString()}\n(${settingsBrowser.toString()})(${settingsReturnUrl.toString()},${mountCalibrationPage.toString()},${captureScaleWeight.toString()},availablePitchers,validateSettings,${mountFlowCalibrationPage.toString()});}</script></body></html>`;
 }
