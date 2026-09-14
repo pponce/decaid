@@ -185,6 +185,12 @@ jobs:
       - name: Test Decent app skill docs
         run: scripts/test_decent_app_skill.sh
 
+      - name: Test calibrated steam plugin and generated assets
+        run: |
+          node packages/calibrated-steam/build.mjs
+          node --test packages/calibrated-steam/test/*.test.mjs
+          git diff --exit-code -- assets/plugins/calibrated-steam.reaplugin
+
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
