@@ -72,9 +72,7 @@ void main() {
         'assets/plugins/shot-upload.reaplugin/manifest.json',
       ).readAsString(),
     );
-    final manifest = PluginManifest.fromJson(
-      manifestJson as Map<String, dynamic>,
-    );
+    final manifest = PluginManifest.fromJson(manifestJson as Map<String, dynamic>);
     final pluginSource = await File(
       'assets/plugins/shot-upload.reaplugin/plugin.js',
     ).readAsString();

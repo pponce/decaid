@@ -49,44 +49,46 @@ void main() {
     return pending.timeout(const Duration(seconds: 5));
   }
 
-  test('bundled calculator works through the native plugin HTTP bridge', () async {
-    final manager = PluginManager(kvStore: FakeKeyValueStoreService());
-    addTearDown(manager.dispose);
-    await manager.loadPlugin(
-      id: manifest.id,
-      manifest: manifest,
-      settings: settings,
-      jsCode: source,
-    );
-    final response = await invoke(
-      manager,
-      'calculate',
-      method: 'POST',
-      body: {
-        'samples': [
-          for (final age in [800, 400, 0])
-            {'weightGrams': 330, 'ageMs': age},
-        ],
-        'jug': 'auto',
-        'machineState': 'idle',
-        'stopAtTemperature': 0,
-      },
-    );
-    expect(response['status'], 200);
-    final body = jsonDecode(response['body'] as String);
-    expect(body['durationSeconds'], 30);
-    expect(body['jug'], 'small');
-    expect(body['workflowPatch'], {
-      'steamSettings': {'duration': 30, 'flow': 1.5},
-    });
-    final invalid = await invoke(
-      manager,
-      'calculate',
-      method: 'POST',
-      body: {},
-    );
-    expect(invalid['status'], 422);
-  });
+  test(
+    'bundled calculator works through the native plugin HTTP bridge',
+    () async {
+      final manager = PluginManager(kvStore: FakeKeyValueStoreService());
+      addTearDown(manager.dispose);
+      await manager.loadPlugin(
+        id: manifest.id,
+        manifest: manifest,
+        settings: settings,
+        jsCode: source,
+      );
+      final response = await invoke(
+        manager,
+        'calculate',
+        method: 'POST',
+        body: {
+          'samples': [
+            for (final age in [800, 400, 0]) {'weightGrams': 330, 'ageMs': age},
+          ],
+          'jug': 'auto',
+          'machineState': 'idle',
+          'stopAtTemperature': 0,
+        },
+      );
+      expect(response['status'], 200);
+      final body = jsonDecode(response['body'] as String);
+      expect(body['durationSeconds'], 30);
+      expect(body['jug'], 'small');
+      expect(body['workflowPatch'], {
+        'steamSettings': {'duration': 30, 'flow': 1.5},
+      });
+      final invalid = await invoke(
+        manager,
+        'calculate',
+        method: 'POST',
+        body: {},
+      );
+      expect(invalid['status'], 422);
+    },
+  );
 
   test('unconfigured plugin renders settings without arming a timer', () async {
     final manager = PluginManager(kvStore: FakeKeyValueStoreService());
