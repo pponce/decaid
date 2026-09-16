@@ -1371,29 +1371,6 @@ DELETE /api/v1/store/{namespace}/{key}
 
 ### Plugins API
 
-The bundled [Auto Steam Calculator](CalibratedSteam.md#skin-developer-contract)
-provides milk-weight/time calibration and automatic pitcher selection inspired by
-Damian's DSx2. Supporting skins discover the loaded plugin, collect fresh scale
-observations through their existing connection, offer a pitcher choice, then recheck
-before applying duration and calibration flow through the workflow API.
-The skin restores its existing normal heater setting after Auto Off; the v3
-calculator does not capture heater calibration or compensate time for temperature. The plugin
-owns the calculation and settings; skins do not need to copy either. Streamline's
-companion integration adds Auto to the steam mode cycle and uses pitcher presets for direct calculation.
-Render `status.availablePitchers` and gate calculations on `ready`. Open the standalone
-settings form with a `returnTo` URL so Return to settings and successful Save return
-to the calling skin; see the calculator guide for validation and host restrictions.
-The shared page includes compact General, Pitchers & Auto, and Calibration tabs,
-with tare, pitcher capture and guided steam calibration. The Flow inputs share
-one setting; capture errors appear beside the relevant control. Calibration now
-offers single-flow and 2–4 multiple-flow readings, manually entered or guided.
-Use `status.flowCalibration` for adjustable bounds and pass the selected `flow`
-on both calculation requests. Never extrapolate or retain an armed duration after
-changing flow. Single-flow Auto hides − / +; multiple-flow Auto uses them for
-flow, while normal Flow/Time controls remain available. Pass
-`steamHeaterTemperature` when supplying a remembered normal heater target after
-Auto Off. Defer Auto writes and resets while `status.calibrationActive` is true.
-
 Query loaded plugins and their settings.
 
 #### List Loaded Plugins

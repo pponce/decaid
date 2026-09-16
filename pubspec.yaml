@@ -185,7 +185,6 @@ flutter:
     - assets/ble-reconnect-diagnostics/
     - assets/api/
     - assets/plugins/time-to-ready.reaplugin/
-    - assets/plugins/calibrated-steam.reaplugin/
     - assets/plugins/visualizer.reaplugin/
     - assets/plugins/settings.reaplugin/
     - assets/plugins/dye2.reaplugin/
