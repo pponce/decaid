@@ -19,9 +19,8 @@ Off and cannot calculate until setup is valid. Manual steam settings remain back
 up and are restored on exit. Removed saved pitcher selections fall back to the
 configured default; stale taps are revalidated before any calculated settings write.
 
-User-facing text says pitcher; compatibility keys retain jug spellings to preserve
-saved data and existing consumers. Plugin v0.3.0 adds status.availablePitchers while
-retaining calculator API v2 and the Decaid host manifest API v1.
+User-facing text, setting keys and calculator API fields all use pitcher terminology.
+Status exposes the configured choices through availablePitchers.
 
 Auto-mode flow defaults to 0.4 ml/s and accepts 0.4–2.5 ml/s. An old unset
 value of 0 migrates to the default; existing nonzero values remain visible for

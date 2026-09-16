@@ -1,7 +1,7 @@
 /* Calibrated Steam Timer. GPL-3.0-only. Inspired by Damian / Damian-AU, DSx2. */
 (function () {
 "use strict";
-const MANIFEST = {"id":"calibrated-steam.reaplugin","name":"Auto Steam Calculator","author":"pponce; calculation and pitcher heuristic inspired by Damian / Damian-AU (DSx2)","description":"Estimate steam duration from milk weight using your calibration. Inspired by Damian's DSx2 calculator. This estimates temperature through time; it does not measure milk temperature.","version":"0.7.0","apiVersion":1,"permissions":["api","events.machine"],"settings":{"smallJugGrams":{"type":"number","label":"Small empty pitcher (g)","description":"Untared weight of the empty small pitcher. Leave blank or 0 if not configured.","default":0},"mediumJugGrams":{"type":"number","label":"Medium empty pitcher (g)","description":"Untared weight of the empty medium pitcher. Leave blank or 0 if not configured.","default":0},"largeJugGrams":{"type":"number","label":"Large empty pitcher (g)","description":"Untared weight of the empty large pitcher. Leave blank or 0 if not configured.","default":0},"singleDrinkGrams":{"type":"number","label":"Usual milk per drink (g)","description":"Milk only for one drink; used to infer pitcher size in Auto. This can differ from your calibration milk weight.","default":0},"singleDrinkJug":{"type":"enum","label":"Pitcher normally used for one drink","description":"Select small or medium to choose the pitcher-detection thresholds.","values":["","small","medium"],"default":""},"weightMode":{"type":"enum","label":"Scale weight mode","description":"Gross includes the empty pitcher. Tared is milk only: pitcher size cannot be inferred and no pitcher weight is subtracted.","values":["gross","tared"],"default":"gross"},"referenceMilkGrams":{"type":"number","label":"Calibration milk weight (g)","description":"Milk only, excluding the pitcher, from your measured calibration run.","default":0},"referenceSeconds":{"type":"number","label":"Time to your desired milk temperature (s)","description":"Actual steaming time in the calibration run. Use similar milk, starting temperature and steaming technique for subsequent drinks.","default":0},"referenceFlow":{"type":"number","label":"Auto steam flow (ml/s)","description":"Fixed flow for single calibration, or default flow within the multiple-calibration range (0.4–2.5 ml/s).","default":0.4},"defaultJug":{"type":"enum","label":"Starting pitcher selection","description":"Small, Medium or Large subtracts that pitcher weight. Auto guesses the pitcher using milk per drink. Streamline remembers subsequent preset selections.","values":["small","medium","large","auto"],"default":"small"},"autoDetect":{"type":"boolean","label":"Offer Auto pitcher selection","description":"Enable automatic detection using Damian’s heuristic. Requires all three pitcher weights, gross scale weight, usual milk per drink and the pitcher normally used for one drink.","default":false},"calibrationMode":{"type":"enum","label":"Calibration type","values":["single","multiple"],"default":"single","description":"Single flow is fixed. Multiple flows interpolate between 2–4 measured calibrations."},"flowReadings":{"type":"string","label":"Measured flow calibrations","default":"[]","description":"Managed by the Calibration page. JSON readings with flow, milkGrams and seconds."}},"api":[{"id":"status","type":"http","data":{}},{"id":"calculate","type":"http","data":{}},{"id":"validate","type":"http","data":{}},{"id":"ui","type":"http","data":{}},{"id":"calibration","type":"http","data":{}}]};
+const MANIFEST = {"id":"calibrated-steam.reaplugin","name":"Auto Steam Calculator","author":"pponce; calculation and pitcher heuristic inspired by Damian / Damian-AU (DSx2)","description":"Estimate steam duration from milk weight using your calibration. Inspired by Damian's DSx2 calculator. This estimates temperature through time; it does not measure milk temperature.","version":"0.8.0","apiVersion":1,"permissions":["api","events.machine"],"settings":{"smallPitcherGrams":{"type":"number","label":"Small empty pitcher (g)","description":"Untared weight of the empty small pitcher. Leave blank or 0 if not configured.","default":0},"mediumPitcherGrams":{"type":"number","label":"Medium empty pitcher (g)","description":"Untared weight of the empty medium pitcher. Leave blank or 0 if not configured.","default":0},"largePitcherGrams":{"type":"number","label":"Large empty pitcher (g)","description":"Untared weight of the empty large pitcher. Leave blank or 0 if not configured.","default":0},"singleDrinkGrams":{"type":"number","label":"Usual milk per drink (g)","description":"Milk only for one drink; used to infer pitcher size in Auto. This can differ from your calibration milk weight.","default":0},"singleDrinkPitcher":{"type":"enum","label":"Pitcher normally used for one drink","description":"Select small or medium to choose the pitcher-detection thresholds.","values":["","small","medium"],"default":""},"weightMode":{"type":"enum","label":"Scale weight mode","description":"Gross includes the empty pitcher. Tared is milk only: pitcher size cannot be inferred and no pitcher weight is subtracted.","values":["gross","tared"],"default":"gross"},"referenceMilkGrams":{"type":"number","label":"Calibration milk weight (g)","description":"Milk only, excluding the pitcher, from your measured calibration run.","default":0},"referenceSeconds":{"type":"number","label":"Time to your desired milk temperature (s)","description":"Actual steaming time in the calibration run. Use similar milk, starting temperature and steaming technique for subsequent drinks.","default":0},"referenceFlow":{"type":"number","label":"Auto steam flow (ml/s)","description":"Fixed flow for single calibration, or default flow within the multiple-calibration range (0.4–2.5 ml/s).","default":0.4},"defaultPitcher":{"type":"enum","label":"Starting pitcher selection","description":"Small, Medium or Large subtracts that pitcher weight. Auto guesses the pitcher using milk per drink. Streamline remembers subsequent preset selections.","values":["small","medium","large","auto"],"default":"small"},"autoDetect":{"type":"boolean","label":"Offer Auto pitcher selection","description":"Enable automatic detection using Damian’s heuristic. Requires all three pitcher weights, gross scale weight, usual milk per drink and the pitcher normally used for one drink.","default":false},"calibrationMode":{"type":"enum","label":"Calibration type","values":["single","multiple"],"default":"single","description":"Single flow is fixed. Multiple flows interpolate between 2–4 measured calibrations."},"flowReadings":{"type":"string","label":"Measured flow calibrations","default":"[]","description":"Managed by the Calibration page. JSON readings with flow, milkGrams and seconds."}},"api":[{"id":"status","type":"http","data":{}},{"id":"calculate","type":"http","data":{}},{"id":"validate","type":"http","data":{}},{"id":"ui","type":"http","data":{}},{"id":"calibration","type":"http","data":{}}]};
 function readFlowReadings(settings) {
   try {
     if (typeof settings.flowReadings !== 'string' || settings.flowReadings.length > 4096) return null;
@@ -73,7 +73,7 @@ class CalculationError extends Error {
 
 function configuredPitchers(settings) {
   return ['small', 'medium', 'large'].filter(size => {
-    const weight = settings[`${size}JugGrams`];
+    const weight = settings[`${size}PitcherGrams`];
     return Number.isFinite(weight) && weight >= 1 && weight <= 3000;
   });
 }
@@ -82,7 +82,7 @@ function availablePitchers(settings) {
   const choices = configuredPitchers(settings);
   if (settings.autoDetect === true && settings.weightMode === 'gross' && choices.length === 3 &&
       Number.isFinite(settings.singleDrinkGrams) && settings.singleDrinkGrams >= 10 && settings.singleDrinkGrams <= 1000 &&
-      ['small', 'medium'].includes(settings.singleDrinkJug)) choices.push('auto');
+      ['small', 'medium'].includes(settings.singleDrinkPitcher)) choices.push('auto');
   return choices;
 }
 
@@ -91,7 +91,7 @@ function validateSettings(settings) {
   const names = {
     referenceMilkGrams: 'Calibration milk weight', referenceSeconds: 'Calibration time',
     referenceFlow: 'Calibration flow', singleDrinkGrams: 'Usual milk per drink',
-    smallJugGrams: 'Small pitcher weight', mediumJugGrams: 'Medium pitcher weight', largeJugGrams: 'Large pitcher weight',
+    smallPitcherGrams: 'Small pitcher weight', mediumPitcherGrams: 'Medium pitcher weight', largePitcherGrams: 'Large pitcher weight',
   };
   const range = (key, minimum, maximum, integer = false) => {
     const value = settings[key];
@@ -105,18 +105,18 @@ function validateSettings(settings) {
   }
   errors.push(...validateFlowCalibration(settings));
   range('referenceFlow', 0.4, 2.5);
-  for (const key of ['smallJugGrams', 'mediumJugGrams', 'largeJugGrams']) range(key, settings[key] === 0 ? 0 : 1, 3000);
+  for (const key of ['smallPitcherGrams', 'mediumPitcherGrams', 'largePitcherGrams']) range(key, settings[key] === 0 ? 0 : 1, 3000);
   if (!configuredPitchers(settings).length) errors.push({ field: 'pitchers', message: 'Enter at least one empty pitcher weight (1–3000 g).' });
   if (!['gross', 'tared'].includes(settings.weightMode)) errors.push({ field: 'weightMode', message: 'Choose gross or tared scale weight.' });
   if (typeof settings.autoDetect !== 'boolean') errors.push({ field: 'autoDetect', message: 'Choose whether to offer automatic pitcher detection.' });
   if (settings.autoDetect === true) {
     range('singleDrinkGrams', 10, 1000);
-    if (!['small', 'medium'].includes(settings.singleDrinkJug)) errors.push({ field: 'singleDrinkJug', message: 'Choose the small or medium pitcher normally used for one drink.' });
+    if (!['small', 'medium'].includes(settings.singleDrinkPitcher)) errors.push({ field: 'singleDrinkPitcher', message: 'Choose the small or medium pitcher normally used for one drink.' });
     if (configuredPitchers(settings).length !== 3) errors.push({ field: 'pitchers', message: 'Automatic detection requires all three pitcher weights for Damian’s detection thresholds.' });
     if (settings.weightMode !== 'gross') errors.push({ field: 'weightMode', message: 'Automatic pitcher detection requires gross weight (pitcher plus milk).' });
   }
-  if (settings.defaultJug !== undefined && configuredPitchers(settings).length && !availablePitchers(settings).includes(settings.defaultJug)) {
-    errors.push({ field: 'defaultJug', message: 'Choose a configured starting pitcher selection.' });
+  if (settings.defaultPitcher !== undefined && configuredPitchers(settings).length && !availablePitchers(settings).includes(settings.defaultPitcher)) {
+    errors.push({ field: 'defaultPitcher', message: 'Choose a configured starting pitcher selection.' });
   }
   return errors;
 }
@@ -141,30 +141,30 @@ function stableWeight(samples) {
   return weights.length % 2 ? weights[middle] : (weights[middle - 1] + weights[middle]) / 2;
 }
 
-function inferredJug(settings, weight) {
-  const singleIsSmall = settings.singleDrinkJug === 'small';
-  const mediumThreshold = (singleIsSmall ? 1.7 : 0.7) * settings.singleDrinkGrams + settings.smallJugGrams;
-  const largeThreshold = (singleIsSmall ? 2.7 : 1.7) * settings.singleDrinkGrams + settings.mediumJugGrams;
-  let jug = 'small';
-  if (weight > mediumThreshold) jug = 'medium';
-  if (weight > largeThreshold) jug = 'large';
-  return jug;
+function inferredPitcher(settings, weight) {
+  const singleIsSmall = settings.singleDrinkPitcher === 'small';
+  const mediumThreshold = (singleIsSmall ? 1.7 : 0.7) * settings.singleDrinkGrams + settings.smallPitcherGrams;
+  const largeThreshold = (singleIsSmall ? 2.7 : 1.7) * settings.singleDrinkGrams + settings.mediumPitcherGrams;
+  let pitcher = 'small';
+  if (weight > mediumThreshold) pitcher = 'medium';
+  if (weight > largeThreshold) pitcher = 'large';
+  return pitcher;
 }
 
 function calculate(settings, input) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) fail('invalid_request', 'A calculation request is required.');
   if (validateSettings(settings).length) fail('configuration_required', 'Complete the calibration settings before calculating.');
-  const choice = input.jug ?? 'auto';
+  const choice = input.pitcher ?? 'auto';
   if (!['auto', 'small', 'medium', 'large'].includes(choice)) fail('invalid_request', 'Choose Auto, Small, Medium or Large pitcher.');
   if (!availablePitchers(settings).includes(choice)) fail('pitcher_not_configured', 'Configure this pitcher selection in Settings before calculating.');
   if (input.machineState !== 'idle') fail('machine_not_idle', 'Wait until the machine is idle before setting a steam time.');
   if (!Number.isFinite(input.stopAtTemperature) || input.stopAtTemperature !== 0) fail('probe_stop_active', 'Turn off milk-probe stopping before using the calibrated timer.');
   const scaleGrams = stableWeight(input.samples);
   const tared = settings.weightMode === 'tared';
-  const jug = choice !== 'auto' ? choice : (tared ? null : inferredJug(settings, scaleGrams));
-  const jugGrams = tared ? 0 : settings[`${jug}JugGrams`];
-  const milkGrams = Math.round((scaleGrams - jugGrams) * 10) / 10;
-  const pitcherLabel = tared ? 'milk only' : jug[0].toUpperCase() + jug.slice(1) + ' pitcher';
+  const pitcher = choice !== 'auto' ? choice : (tared ? null : inferredPitcher(settings, scaleGrams));
+  const pitcherGrams = tared ? 0 : settings[`${pitcher}PitcherGrams`];
+  const milkGrams = Math.round((scaleGrams - pitcherGrams) * 10) / 10;
+  const pitcherLabel = tared ? 'milk only' : pitcher[0].toUpperCase() + pitcher.slice(1) + ' pitcher';
   if (milkGrams < 10) fail('invalid_milk_weight', 'Milk < 10 g · ' + pitcherLabel);
   if (milkGrams > 1500) fail('invalid_milk_weight', 'Milk > 1500 g · ' + pitcherLabel);
   const calibration = flowCalibration(settings);
@@ -173,8 +173,8 @@ function calculate(settings, input) {
   const durationSeconds = Math.round(secondsPerGram(settings, flow) * milkGrams);
   if (durationSeconds < 1 || durationSeconds > 255) fail('duration_out_of_range', `Calculated time ${durationSeconds}s is outside the supported timer range of 1–255 seconds. Check the calibration and milk amount.`);
   return {
-    apiVersion: 3, jug, jugSource: tared ? 'tared' : (choice === 'auto' ? 'heuristic' : 'manual'),
-    scaleGrams, jugGrams, milkGrams, durationSeconds,
+    apiVersion: 4, pitcher, pitcherSource: tared ? 'tared' : (choice === 'auto' ? 'heuristic' : 'manual'),
+    scaleGrams, pitcherGrams, milkGrams, durationSeconds,
     workflowPatch: { steamSettings: { duration: durationSeconds, flow } },
   };
 }
@@ -530,14 +530,14 @@ function mountCalibrationPage({ form, labels, save, back, status, request, base,
     });
     return element;
   };
-  const weights = labels.smallJugGrams.closest('fieldset');
+  const weights = labels.smallPitcherGrams.closest('fieldset');
   const scaleBox = make('div'); scaleBox.className = 'full-width';
   const scaleTools = make('div'); scaleTools.className = 'scale-tools';
   const scaleValue = make('p', 'Scale disconnected. Manual entry is available.');
   const scaleHelp = make('p', 'Tare with nothing on the scale. Wait for zero, then place an empty pitcher.');
   scaleHelp.className = 'local-status'; scaleHelp.setAttribute('role', 'status');
   scaleTools.append(scaleValue); scaleBox.append(scaleTools, scaleHelp);
-  weights.insertBefore(scaleBox, labels.smallJugGrams);
+  weights.insertBefore(scaleBox, labels.smallPitcherGrams);
   const guided = make('fieldset'); guided.className = 'guided-calibration';
   guided.append(make('legend', 'Guided calibration'));
   const flowLabel = make('label', 'Auto flow / default (ml/s)'); flowLabel.className = 'field calibration-flow';
@@ -589,18 +589,18 @@ function mountCalibrationPage({ form, labels, save, back, status, request, base,
   const tarePitchers = button('Tare empty scale', scaleTools, tare, scaleHelp);
   for (const size of sizes) {
     const result = make('p'); result.className = 'capture-result'; result.setAttribute('role', 'status');
-    const capture = button('Set from scale', labels[size + 'JugGrams'], () => {
+    const capture = button('Set from scale', labels[size + 'PitcherGrams'], () => {
       const value = weight();
       if (value < 1 || value > 3000) throw new Error('Place an empty pitcher on the scale (1–3000 g).');
-      field(size + 'JugGrams').value = value;
+      field(size + 'PitcherGrams').value = value;
       clearCapture(); updateChoices(); updatePitchers();
       result.textContent = size[0].toUpperCase() + size.slice(1) + ' pitcher set to ' + value + ' g.';
     }, result);
-    capture.className = 'capture-button'; labels[size + 'JugGrams'].append(result); captureButtons.push(capture);
+    capture.className = 'capture-button'; labels[size + 'PitcherGrams'].append(result); captureButtons.push(capture);
   }
   const tareMilk = button('Tare empty scale', milkTools, tare, milk);
   const captureMilk = button('Capture pitcher + milk', milkActions, () => {
-    const size = pitcher.value, pitcherGrams = Number(field(size + 'JugGrams')?.value);
+    const size = pitcher.value, pitcherGrams = Number(field(size + 'PitcherGrams')?.value);
     if (!sizes.includes(size) || !(pitcherGrams >= 1 && pitcherGrams <= 3000)) throw new Error('Configure and choose a pitcher first.');
     const total = weight(), milkGrams = Math.round((total - pitcherGrams) * 10) / 10;
     const name = size[0].toUpperCase() + size.slice(1);
@@ -677,15 +677,15 @@ function mountCalibrationPage({ form, labels, save, back, status, request, base,
     const previous = pitcher.value;
     pitcher.replaceChildren();
     for (const size of sizes) {
-      const grams = Number(field(size + 'JugGrams').value);
+      const grams = Number(field(size + 'PitcherGrams').value);
       if (!(grams >= 1 && grams <= 3000)) continue;
       const option = make('option', size[0].toUpperCase() + size.slice(1) + ' (' + grams + ' g)'); option.value = size; pitcher.append(option);
     }
-    if (sizes.includes(previous) && Number(field(previous + 'JugGrams').value) >= 1) pitcher.value = previous;
+    if (sizes.includes(previous) && Number(field(previous + 'PitcherGrams').value) >= 1) pitcher.value = previous;
     paint();
   }
   form.addEventListener('input', event => {
-    if (event.target === pitcher || event.target?.name?.endsWith('JugGrams')) { clearCapture(); updatePitchers(); }
+    if (event.target === pitcher || event.target?.name?.endsWith('PitcherGrams')) { clearCapture(); updatePitchers(); }
 
   });
   pitcher.addEventListener('change', () => { clearCapture(); paint(); });
@@ -786,9 +786,9 @@ function settingsBrowser(resolveReturnUrl, mountCalibration, captureWeight, pitc
   function updateChoices() {
     const current = values();
     document.getElementById('automatic-fields').hidden = !current.autoDetect;
-    for (const key of ['singleDrinkGrams', 'singleDrinkJug']) field(key).required = current.autoDetect;
+    for (const key of ['singleDrinkGrams', 'singleDrinkPitcher']) field(key).required = current.autoDetect;
     const choices = pitcherChoices(current);
-    const select = field('defaultJug'), previous = select.value;
+    const select = field('defaultPitcher'), previous = select.value;
     select.replaceChildren();
     for (const choice of choices) {
       const option = make('option', choice === 'auto' ? 'Auto' : choice[0].toUpperCase() + choice.slice(1));
@@ -798,9 +798,17 @@ function settingsBrowser(resolveReturnUrl, mountCalibration, captureWeight, pitc
     select.disabled = guided?.isActive() || choices.length === 0;
     const names = { small: 'S', medium: 'M', large: 'L', auto: 'Auto' };
     const missing = Object.keys(names).filter(key => !choices.includes(key));
-    summary.textContent = 'Configured: ' + (choices.map(key => names[key]).join(', ') || 'none') +
-      (missing.length ? ' · Not configured: ' + missing.map(key => names[key]).join(', ') : '') +
-      ' · Calibration: ' + (validateConfiguration(values()).length ? 'setup required' : 'ready');
+    summary.replaceChildren(make('span', 'Configured: '));
+    for (const choice of choices) {
+      const badge = make('span', names[choice]);
+      badge.className = 'configured-pitcher';
+      summary.append(badge);
+    }
+    if (!choices.length) summary.append(make('span', 'none'));
+    if (missing.length) summary.append(make('span', ' · Not configured: ' + missing.map(key => names[key]).join(', ')));
+    const flow = Number(current.referenceFlow);
+    summary.append(make('span', ' · Calibration: ' + (validateConfiguration(values()).length ? 'setup required' : 'ready') +
+      (Number.isFinite(flow) && flow >= 0.4 && flow <= 2.5 ? ' · ' + flow.toFixed(1) + ' ml/s' : '')));
   }
   function syncFlow(value, measured = false) {
     const changed = Number(value) !== Number(flowValue);
@@ -833,13 +841,13 @@ function settingsBrowser(resolveReturnUrl, mountCalibration, captureWeight, pitc
         form.append(panel); panels[name] = panel;
       }
       const groups = [
-        ['general', 'General settings', ['referenceFlow', 'weightMode', 'defaultJug']],
-        ['pitchers', 'Empty pitcher weights', ['smallJugGrams', 'mediumJugGrams', 'largeJugGrams']],
-        ['pitchers', 'Automatic pitcher selection', ['autoDetect', 'singleDrinkGrams', 'singleDrinkJug']],
+        ['general', 'General settings', ['referenceFlow', 'weightMode', 'defaultPitcher']],
+        ['pitchers', 'Empty pitcher weights', ['smallPitcherGrams', 'mediumPitcherGrams', 'largePitcherGrams']],
+        ['pitchers', 'Automatic pitcher selection', ['autoDetect', 'singleDrinkGrams', 'singleDrinkPitcher']],
         ['calibration', 'Manual calibration / measured values', ['referenceMilkGrams', 'referenceSeconds']],
       ];
-      const captions = { smallJugGrams: 'Small (g)', mediumJugGrams: 'Medium (g)', largeJugGrams: 'Large (g)', referenceFlow: 'Steam flow (ml/s)', weightMode: 'Scale weight mode', defaultJug: 'Starting pitcher selection' };
-      const hints = { smallJugGrams: 'Empty pitcher. Blank means unused.', mediumJugGrams: 'Empty pitcher. Blank means unused.', largeJugGrams: 'Empty pitcher. Blank means unused.', referenceFlow: 'Shared with Calibration. Used for all Auto steaming.', weightMode: 'Gross: pitcher + milk. Tared: milk only.' };
+      const captions = { smallPitcherGrams: 'Small (g)', mediumPitcherGrams: 'Medium (g)', largePitcherGrams: 'Large (g)', referenceFlow: 'Steam flow (ml/s)', weightMode: 'Scale weight mode', defaultPitcher: 'Starting pitcher selection' };
+      const hints = { smallPitcherGrams: 'Empty pitcher. Blank means unused.', mediumPitcherGrams: 'Empty pitcher. Blank means unused.', largePitcherGrams: 'Empty pitcher. Blank means unused.', referenceFlow: 'Shared with Calibration. Used for all Auto steaming.', weightMode: 'Gross: pitcher + milk. Tared: milk only.' };
       for (const [panelName, heading, keys] of groups) {
         const section = make('fieldset'); section.append(make('legend', heading)); panels[panelName].append(section);
         let automaticFields;
@@ -848,7 +856,7 @@ function settingsBrowser(resolveReturnUrl, mountCalibration, captureWeight, pitc
         }
         for (const key of keys) {
           const item = schema[key]; if (!item) continue;
-          const wrapper = make('div'); wrapper.className = key.endsWith('JugGrams') ? 'field pitcher-field' : 'field';
+          const wrapper = make('div'); wrapper.className = key.endsWith('PitcherGrams') ? 'field pitcher-field' : 'field';
           const label = make('label', captions[key] || item.label); label.htmlFor = 'setting-' + key; wrapper.append(label);
           const input = make(item.type === 'enum' ? 'select' : 'input'); input.name = key; input.id = 'setting-' + key;
           if (item.type === 'enum') {
@@ -904,9 +912,9 @@ function settingsBrowser(resolveReturnUrl, mountCalibration, captureWeight, pitc
 function settingsPage() {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Auto Steam Calculator</title>
 <style>
-:root{color-scheme:light dark;--bg:#f3f5f9;--surface:#fff;--text:#26334a;--muted:#526179;--border:#ccd5e2;--accent:#385a92;--notice:#eef3fb;font:14px/1.45 system-ui,sans-serif}
-@media(prefers-color-scheme:dark){:root{--bg:#172132;--surface:#202b3e;--text:#e4eaf4;--muted:#b6c1d4;--border:#465166;--accent:#456faf;--notice:#2c3c55}}
-*{box-sizing:border-box}body{max-width:940px;margin:auto;padding:16px;background:var(--bg);color:var(--text)}header{display:flex;gap:14px;align-items:center;flex-wrap:wrap}h1{font-size:22px;font-weight:600;margin:0}h2{font-size:16px;margin:0}p{margin:10px 0}button,a,input,select{touch-action:manipulation}button,input,select{font:inherit;color:var(--text);background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px;min-height:44px}input,select{font-size:16px;min-width:0;width:100%}input[type=checkbox]{width:24px;height:24px;min-height:24px;accent-color:var(--accent)}button{cursor:pointer}button:disabled{opacity:.5;cursor:default}a{color:var(--accent)}#return-settings{display:inline-block;padding:10px 14px;min-height:44px;text-decoration:none;border:1px solid var(--border);border-radius:8px;background:var(--surface)}#configuration-summary{color:var(--muted);margin:12px 0}#settings-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}#settings-tabs [aria-selected=true],button[aria-pressed=true],#save{background:var(--accent);color:#fff;border-color:transparent}[hidden]{display:none!important}fieldset{border:1px solid var(--border);border-radius:10px;background:var(--surface);padding:14px;margin:0 0 14px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}legend{font-size:16px;font-weight:600;padding:0 5px}.field{display:grid;gap:6px;align-content:start}.field label{font-weight:500}.field small{color:var(--muted)}.field-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;grid-column:1/-1}.pitcher-field{grid-column:1/-1;grid-template-columns:95px minmax(90px,1fr) auto;align-items:center;border-top:1px solid var(--border);padding-top:12px}.pitcher-field small{grid-column:2/-1}.pitcher-field .capture-button{grid-column:3;grid-row:1}.pitcher-field .capture-result{grid-column:1/-1;margin:0}.full-width{grid-column:1/-1}.scale-tools{display:flex;align-items:center;gap:12px;justify-content:space-between;flex-wrap:wrap}.scale-tools p{margin:0}.local-status{background:var(--notice);padding:9px 11px;border-radius:6px;overflow-wrap:anywhere}.guided-calibration{display:block}.calibration-actions{display:flex;flex-wrap:wrap;gap:10px;margin:12px 0}.calibration-timer{font-size:28px;font-variant-numeric:tabular-nums}.calibration-flow{max-width:220px;margin-bottom:12px}.guided-step{padding:12px 0;border-top:1px solid var(--border)}#status{min-height:1.5em;overflow-wrap:anywhere}.save-row{display:flex;align-items:center;gap:14px;justify-content:space-between;flex-wrap:wrap}footer{font-size:12px;color:var(--muted);margin-top:14px}details{margin-top:12px}summary{cursor:pointer;min-height:44px;padding:10px 0}
+:root{color-scheme:light dark;--bg:#f3f5f9;--surface:#fff;--text:#26334a;--muted:#526179;--border:#ccd5e2;--accent:#385a92;--notice:#eef3fb;--configured-bg:#def4e4;--configured-text:#24533a;font:14px/1.45 system-ui,sans-serif}
+@media(prefers-color-scheme:dark){:root{--bg:#172132;--surface:#202b3e;--text:#e4eaf4;--muted:#b6c1d4;--border:#465166;--accent:#456faf;--notice:#2c3c55;--configured-bg:#234136;--configured-text:#bde4ca}}
+*{box-sizing:border-box}body{max-width:940px;margin:auto;padding:16px;background:var(--bg);color:var(--text)}header{display:flex;gap:14px;align-items:center;flex-wrap:wrap}h1{font-size:22px;font-weight:600;margin:0}h2{font-size:16px;margin:0}p{margin:10px 0}button,a,input,select{touch-action:manipulation}button,input,select{font:inherit;color:var(--text);background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px;min-height:44px}input,select{font-size:16px;min-width:0;width:100%}input[type=checkbox]{width:24px;height:24px;min-height:24px;accent-color:var(--accent)}button{cursor:pointer}button:disabled{opacity:.5;cursor:default}a{color:var(--accent)}#return-settings{display:inline-block;padding:10px 14px;min-height:44px;text-decoration:none;border:1px solid var(--border);border-radius:8px;background:var(--surface)}#configuration-summary{display:flex;align-items:center;flex-wrap:wrap;gap:8px;color:var(--muted);margin:12px 0}.configured-pitcher{display:inline-block;background:var(--configured-bg);color:var(--configured-text);padding:5px 10px;border-radius:7px}#settings-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}#settings-tabs [aria-selected=true],button[aria-pressed=true],#save{background:var(--accent);color:#fff;border-color:transparent}[hidden]{display:none!important}fieldset{border:1px solid var(--border);border-radius:10px;background:var(--surface);padding:14px;margin:0 0 14px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}legend{font-size:16px;font-weight:600;padding:0 5px}.field{display:grid;gap:6px;align-content:start}.field label{font-weight:500}.field small{color:var(--muted)}.field-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;grid-column:1/-1}.pitcher-field{grid-column:1/-1;grid-template-columns:95px minmax(90px,1fr) auto;align-items:center;border-top:1px solid var(--border);padding-top:12px}.pitcher-field small{grid-column:2/-1}.pitcher-field .capture-button{grid-column:3;grid-row:1}.pitcher-field .capture-result{grid-column:1/-1;margin:0}.full-width{grid-column:1/-1}.scale-tools{display:flex;align-items:center;gap:12px;justify-content:space-between;flex-wrap:wrap}.scale-tools p{margin:0}.local-status{background:var(--notice);padding:9px 11px;border-radius:6px;overflow-wrap:anywhere}.guided-calibration{display:block}.calibration-actions{display:flex;flex-wrap:wrap;gap:10px;margin:12px 0}.calibration-timer{font-size:28px;font-variant-numeric:tabular-nums}.calibration-flow{max-width:220px;margin-bottom:12px}.guided-step{padding:12px 0;border-top:1px solid var(--border)}#status{min-height:1.5em;overflow-wrap:anywhere}.save-row{display:flex;align-items:center;gap:14px;justify-content:space-between;flex-wrap:wrap}footer{font-size:12px;color:var(--muted);margin-top:14px}details{margin-top:12px}summary{cursor:pointer;min-height:44px;padding:10px 0}
 @media(max-width:480px){body{padding:12px}fieldset,.field-grid{grid-template-columns:1fr}.pitcher-field{grid-template-columns:65px minmax(60px,1fr)}.pitcher-field .capture-button{grid-column:2;grid-row:auto}.pitcher-field small{grid-column:1/-1}}
 </style></head><body>
 <header><a id="return-settings" href="/api/v1/plugins/settings.reaplugin/ui">← Settings</a><h1>Auto Steam Calculator</h1></header>
@@ -977,8 +985,8 @@ globalThis.createPlugin = function createPlugin() {
     onLoad(values = {}) {
       settings = configured(values);
       if (settings.referenceFlow === 0) settings.referenceFlow = defaults.referenceFlow;
-      if (values.autoDetect === undefined && !availablePitchers(settings).includes(settings.defaultJug)) {
-        settings.defaultJug = configuredPitchers(settings)[0] ?? 'small';
+      if (values.autoDetect === undefined && !availablePitchers(settings).includes(settings.defaultPitcher)) {
+        settings.defaultPitcher = configuredPitchers(settings)[0] ?? 'small';
       }
       loaded = true;
     },
@@ -1001,7 +1009,7 @@ globalThis.createPlugin = function createPlugin() {
       if (!methods[endpoint]) return json(404, { code: 'not_found', message: 'Unknown endpoint.' });
       if (method !== methods[endpoint]) return json(405, { code: 'method_not_allowed', message: `Use ${methods[endpoint]}.` });
       if (endpoint === 'calibration') return calibrationRequest(body);
-      if (endpoint === 'status') return json(200, { apiVersion: 3, version: MANIFEST.version, calibrationActive: calibrationActive(), ready: validateSettings(settings).length === 0, settings, flowCalibration: flowCalibration(settings), availablePitchers: availablePitchers(settings), errors: validateSettings(settings), schema: MANIFEST.settings });
+      if (endpoint === 'status') return json(200, { apiVersion: 4, version: MANIFEST.version, calibrationActive: calibrationActive(), ready: validateSettings(settings).length === 0, settings, flowCalibration: flowCalibration(settings), availablePitchers: availablePitchers(settings), errors: validateSettings(settings), schema: MANIFEST.settings });
       if (endpoint === 'ui') return { status: 200, headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' }, body: settingsPage() };
       if (endpoint === 'validate') {
         if (!body || typeof body !== 'object' || Array.isArray(body)) return json(400, { code: 'invalid_request', message: 'Settings must be an object.' });

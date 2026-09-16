@@ -21,11 +21,11 @@ void main() {
   );
   const settings = <String, dynamic>{
     'autoDetect': true,
-    'smallJugGrams': 150,
-    'mediumJugGrams': 220,
-    'largeJugGrams': 300,
+    'smallPitcherGrams': 150,
+    'mediumPitcherGrams': 220,
+    'largePitcherGrams': 300,
     'singleDrinkGrams': 160,
-    'singleDrinkJug': 'small',
+    'singleDrinkPitcher': 'small',
     'weightMode': 'gross',
     'referenceMilkGrams': 150,
     'referenceSeconds': 25,
@@ -68,7 +68,7 @@ void main() {
           'samples': [
             for (final age in [800, 400, 0]) {'weightGrams': 330, 'ageMs': age},
           ],
-          'jug': 'auto',
+          'pitcher': 'auto',
           'machineState': 'idle',
           'stopAtTemperature': 0,
         },
@@ -76,7 +76,7 @@ void main() {
       expect(response['status'], 200);
       final body = jsonDecode(response['body'] as String);
       expect(body['durationSeconds'], 30);
-      expect(body['jug'], 'small');
+      expect(body['pitcher'], 'small');
       expect(body['workflowPatch'], {
         'steamSettings': {'duration': 30, 'flow': 1.5},
       });

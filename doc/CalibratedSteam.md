@@ -13,10 +13,12 @@ from **Extensions > Plugins > Open**. Both entry points provide a return address
 **Return to settings** leaves without saving, and a successful **Save calibration**
 returns to the calling settings page. Validation or save errors keep the form open.
 
-Version 0.7.0 uses compact **General**, **Pitchers & Auto**, and **Calibration**
+The settings page uses compact **General**, **Pitchers & Auto**, and **Calibration**
 tabs. General contains scale weight mode, starting pitcher selection and steam
 flow. The summary separates configured choices from calibration readiness and
-updates as the draft changes. Save is required to persist changes. Both Flow
+updates as the draft changes. Configured S, M, L and Auto choices have green
+badges; missing choices and calibration readiness remain separate text. Save is
+required to persist changes. Both Flow
 inputs edit the same `referenceFlow`. In Single flow, changing it clears the old
 measured time. In Multiple flows, it is the default Auto flow; changing it within
 the measured range preserves all readings.
@@ -82,7 +84,7 @@ The skin saves the previous manual duration, flow, heater target and probe-stop
 setting before entering Auto and restores them on exit or plugin disable. A disable
 during steaming defers restoration until idle. Auto values do not replace manual
 preferences or profile values. While Auto is active, use pitcher presets to set the
-time. Manual number editors stay inactive in Auto. Single-flow Auto hides − / +.
+time. Manual number editors stay inactive in Auto. Single-flow Auto hides only the − / + icons, keeping their gray button backgrounds visible and disabled.
 Multiple-flow Auto shows them for flow adjustment in 0.1 ml/s steps within the
 calibrated range, while the machine is idle. Changing flow resets time to Off; tap
 the pitcher again to calculate from the current scale weight. The selected Auto
@@ -97,7 +99,7 @@ press; the selected mode must match the scale display.
 ## Single and multiple flow calibration
 
 Single flow retains the original measured milk weight, time and fixed flow.
-Existing installations upgrade to this mode without losing their calibration.
+Single flow is the default calibration mode.
 
 Multiple flows asks for a minimum and maximum between 0.4 and 2.5 ml/s and **2, 3
 (recommended), or 4 readings**. Two uses both endpoints; three adds a midpoint;
@@ -212,17 +214,16 @@ Settings are persisted through the existing
 reloads a loaded plugin. Use `validate` first for actionable calibration errors.
 The form and its endpoints work offline against the local Decaid server.
 
-Plugin v0.3.0 adds `availablePitchers` to status, for example `["medium"]` or
+Status includes `availablePitchers`, for example `["medium"]` or
 `["small", "medium", "large", "auto"]`. Render these choices instead of hard-coding
 four buttons. Gate calculation on `ready`, re-read status when settings change,
 and reject a saved selection no longer present. `autoDetect` defaults to false;
 missing pitcher weights are 0. Automatic detection requires all three weights,
-`singleDrinkGrams`, `singleDrinkJug` and gross mode. Saving manual-only settings
+`singleDrinkGrams`, `singleDrinkPitcher` and gross mode. Saving manual-only settings
 requires at least one pitcher and the calibration, without Auto-specific inputs.
-Compatibility keys such as `smallJugGrams`, `defaultJug`, `jug` and `jugSource`
-remain unchanged to preserve existing saved settings and API clients; all UI
-labels use “pitcher.” Older settings retain their calibration, but automatic
-detection must be explicitly enabled after upgrading.
+Settings and API fields consistently use pitcher terminology: `smallPitcherGrams`,
+`mediumPitcherGrams`, `largePitcherGrams`, `singleDrinkPitcher`, `defaultPitcher`,
+`pitcher`, `pitcherGrams` and `pitcherSource`.
 
 Open the form as a normal page rather than an iframe. Supply the calling skin's
 settings address using `?returnTo=` plus a URL-encoded absolute URL. The form
@@ -234,25 +235,24 @@ has no dependency on Streamline routes. Streamline supplies its `?page=settings`
 URL and restores the selected settings category from its existing navigation state.
 
 
-### Multiple-flow capability (plugin v0.7.0)
+### Multiple-flow capability
 
-Calculator API remains v3. Status adds `flowCalibration`, either null for invalid
+Status includes `flowCalibration`, either null for invalid
 calibration data or `{mode, adjustable, minimum, maximum, defaultFlow, readings}`.
 Each reading is `{flow, milkGrams, seconds}`. Also require `ready`; valid flow
-readings alone do not establish valid pitcher settings. Older plugin versions
-lack this capability and must be treated as fixed-flow.
+readings alone do not establish valid pitcher settings.
 
 Persist `calibrationMode` (`single` by default, or `multiple`) and `flowReadings`
 (a JSON string containing the ordered 2–4 reading objects). A string is used
 because the existing plugin setting schema supports primitive types. Custom
 skins should use the shared settings page instead of exposing raw JSON. The
-legacy `referenceMilkGrams` and `referenceSeconds` remain the single calibration;
+`referenceMilkGrams` and `referenceSeconds` fields define the single calibration;
 in multiple mode the readings are authoritative. `referenceFlow` is the shared
 fixed/default flow, with a default of 0.4. Changing that default does not mutate
 multiple readings.
 
 A `calculate` body may include optional numeric `flow`. If omitted, the plugin
-uses `referenceFlow`, preserving older skins' default-flow behavior. Single mode
+uses `referenceFlow`. Single mode
 requires its fixed flow. Multiple mode rejects values outside measured bounds
 with `flow_out_of_range`; invalid calibration returns `configuration_required`.
 Pass the selected flow on every preview and revalidation, compare the returned
@@ -275,8 +275,7 @@ Before an Auto workflow write, consult `status.calibrationActive`. If true, defe
 Auto resets, calculated writes and manual-backup restoration. Do not rewrite
 steam settings from another client during calibration. `calculate` returns 409
 while calibration owns the machine settings. This is cooperative skin coordination,
-not a global lock on Decaid's workflow API. The calculator remains API v3; v0.5.0
-adds this status field and the separate calibration endpoint.
+not a global lock on Decaid's workflow API.
 
 A custom guided UI can `POST calibration` with:
 
@@ -308,7 +307,7 @@ Example request body for `calculate`:
     {"weightGrams": 330, "ageMs": 400},
     {"weightGrams": 330, "ageMs": 0}
   ],
-  "jug": "auto",
+  "pitcher": "auto",
   "machineState": "idle",
   "stopAtTemperature": 0
 }
@@ -324,25 +323,23 @@ Timestamp ages are caller-provided; this API cannot authenticate the observation
 or guarantee that a skin is reporting actual live hardware state.
 
 With a 150 g small pitcher and a 150 g / 25 s calibration, the example returns
-`jug: "small"`, `jugSource: "heuristic"`, `milkGrams: 180`,
+`pitcher: "small"`, `pitcherSource: "heuristic"`, `milkGrams: 180`,
 `durationSeconds: 30`, and:
 
 ```json
 {"steamSettings": {"duration": 30, "flow": 1.5}}
 ```
 
-The response also contains `scaleGrams`, `jugGrams`, `apiVersion: 3` and an opaque
+The response also contains `scaleGrams`, `pitcherGrams`, `apiVersion: 4` and an opaque
 `calibrationRevision`. Do not parse the revision: compare it to invalidate a
-preview when the settings change. `jugSource` is `heuristic`, `manual` or `tared`.
+preview when the settings change. `pitcherSource` is `heuristic`, `manual` or `tared`.
 Tared mode requires an explicit configured pitcher choice; Auto detection is unavailable.
 
-The calculator contract is **version 3** in plugin **v0.4.0**; the plugin manifest
-apiVersion remains Decaid host version 1. The response contains duration and flow
-only. Both v2 clients and plugins must be updated together because heater handling
-now belongs to the skin. Check status.apiVersion before using the calculator.
-Old `referenceSteamTemperature` and `maxSeconds` settings are ignored and removed
-from the form and normalized status. There is no configurable maximum duration;
-results must still fit the supported 1–255-second timer range.
+Check `status.apiVersion` before using the calculator; the current contract is 4.
+The plugin manifest's `apiVersion` identifies the Decaid host API and remains 1.
+The workflow patch contains duration and flow only; the skin owns heater handling.
+There is no configurable maximum duration; results must fit the supported
+1–255-second timer range.
 
 Damian's `skin_steam_time_calc` uses calibration time, calibration milk weight,
 scale weight and pitcher weight. It neither scales time for heater temperature nor
@@ -397,7 +394,7 @@ curl -sf -X POST http://localhost:8080/api/v1/plugins/calibrated-steam.reaplugin
 curl -sf http://localhost:8080/api/v1/plugins/calibrated-steam.reaplugin/status
 curl -sf -X POST http://localhost:8080/api/v1/plugins/calibrated-steam.reaplugin/settings \
   -H 'Content-Type: application/json' \
-  -d '{"autoDetect":true,"smallJugGrams":150,"mediumJugGrams":220,"largeJugGrams":300,"singleDrinkGrams":160,"singleDrinkJug":"small","weightMode":"gross","referenceMilkGrams":150,"referenceSeconds":25,"referenceFlow":1.5}'
+  -d '{"autoDetect":true,"smallPitcherGrams":150,"mediumPitcherGrams":220,"largePitcherGrams":300,"singleDrinkGrams":160,"singleDrinkPitcher":"small","weightMode":"gross","referenceMilkGrams":150,"referenceSeconds":25,"referenceFlow":1.5}'
 curl -sf -X POST http://localhost:8080/api/v1/plugins/calibrated-steam.reaplugin/calculate \
   -H 'Content-Type: application/json' \
   -d '{"samples":[{"weightGrams":330,"ageMs":800},{"weightGrams":330,"ageMs":400},{"weightGrams":330,"ageMs":0}],"machineState":"idle","stopAtTemperature":0}'

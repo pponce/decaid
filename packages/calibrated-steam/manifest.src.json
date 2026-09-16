@@ -3,26 +3,26 @@
   "name": "Auto Steam Calculator",
   "author": "pponce; calculation and pitcher heuristic inspired by Damian / Damian-AU (DSx2)",
   "description": "Estimate steam duration from milk weight using your calibration. Inspired by Damian's DSx2 calculator. This estimates temperature through time; it does not measure milk temperature.",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "apiVersion": 1,
   "permissions": [
     "api",
     "events.machine"
   ],
   "settings": {
-    "smallJugGrams": {
+    "smallPitcherGrams": {
       "type": "number",
       "label": "Small empty pitcher (g)",
       "description": "Untared weight of the empty small pitcher. Leave blank or 0 if not configured.",
       "default": 0
     },
-    "mediumJugGrams": {
+    "mediumPitcherGrams": {
       "type": "number",
       "label": "Medium empty pitcher (g)",
       "description": "Untared weight of the empty medium pitcher. Leave blank or 0 if not configured.",
       "default": 0
     },
-    "largeJugGrams": {
+    "largePitcherGrams": {
       "type": "number",
       "label": "Large empty pitcher (g)",
       "description": "Untared weight of the empty large pitcher. Leave blank or 0 if not configured.",
@@ -34,7 +34,7 @@
       "description": "Milk only for one drink; used to infer pitcher size in Auto. This can differ from your calibration milk weight.",
       "default": 0
     },
-    "singleDrinkJug": {
+    "singleDrinkPitcher": {
       "type": "enum",
       "label": "Pitcher normally used for one drink",
       "description": "Select small or medium to choose the pitcher-detection thresholds.",
@@ -73,7 +73,7 @@
       "description": "Fixed flow for single calibration, or default flow within the multiple-calibration range (0.4\u20132.5 ml/s).",
       "default": 0.4
     },
-    "defaultJug": {
+    "defaultPitcher": {
       "type": "enum",
       "label": "Starting pitcher selection",
       "description": "Small, Medium or Large subtracts that pitcher weight. Auto guesses the pitcher using milk per drink. Streamline remembers subsequent preset selections.",

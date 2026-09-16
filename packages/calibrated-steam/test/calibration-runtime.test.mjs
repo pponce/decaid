@@ -31,7 +31,7 @@ test('generated plugin owns calibration, protects its session, and restores befo
   assert.equal(steamSettings.targetTemperature, 150);
   assert.equal(steamSettings.stopAtTemperature, 0);
   assert.equal((await call('status')).calibrationActive, true);
-  assert.equal((await call('calculate', { jug: 'small' })).status, 409);
+  assert.equal((await call('calculate', { pitcher: 'small' })).status, 409);
   assert.equal((await call('calibration', { action: 'begin' })).status, 409);
   assert.equal((await call('calibration', { action: 'start', token: 'other-page' })).status, 409);
   await call('calibration', { action: 'start', token: prepared.token });

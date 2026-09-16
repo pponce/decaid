@@ -12,14 +12,14 @@ function mountCalibrationPage({ form, labels, save, back, status, request, base,
     });
     return element;
   };
-  const weights = labels.smallJugGrams.closest('fieldset');
+  const weights = labels.smallPitcherGrams.closest('fieldset');
   const scaleBox = make('div'); scaleBox.className = 'full-width';
   const scaleTools = make('div'); scaleTools.className = 'scale-tools';
   const scaleValue = make('p', 'Scale disconnected. Manual entry is available.');
   const scaleHelp = make('p', 'Tare with nothing on the scale. Wait for zero, then place an empty pitcher.');
   scaleHelp.className = 'local-status'; scaleHelp.setAttribute('role', 'status');
   scaleTools.append(scaleValue); scaleBox.append(scaleTools, scaleHelp);
-  weights.insertBefore(scaleBox, labels.smallJugGrams);
+  weights.insertBefore(scaleBox, labels.smallPitcherGrams);
   const guided = make('fieldset'); guided.className = 'guided-calibration';
   guided.append(make('legend', 'Guided calibration'));
   const flowLabel = make('label', 'Auto flow / default (ml/s)'); flowLabel.className = 'field calibration-flow';
@@ -71,18 +71,18 @@ function mountCalibrationPage({ form, labels, save, back, status, request, base,
   const tarePitchers = button('Tare empty scale', scaleTools, tare, scaleHelp);
   for (const size of sizes) {
     const result = make('p'); result.className = 'capture-result'; result.setAttribute('role', 'status');
-    const capture = button('Set from scale', labels[size + 'JugGrams'], () => {
+    const capture = button('Set from scale', labels[size + 'PitcherGrams'], () => {
       const value = weight();
       if (value < 1 || value > 3000) throw new Error('Place an empty pitcher on the scale (1–3000 g).');
-      field(size + 'JugGrams').value = value;
+      field(size + 'PitcherGrams').value = value;
       clearCapture(); updateChoices(); updatePitchers();
       result.textContent = size[0].toUpperCase() + size.slice(1) + ' pitcher set to ' + value + ' g.';
     }, result);
-    capture.className = 'capture-button'; labels[size + 'JugGrams'].append(result); captureButtons.push(capture);
+    capture.className = 'capture-button'; labels[size + 'PitcherGrams'].append(result); captureButtons.push(capture);
   }
   const tareMilk = button('Tare empty scale', milkTools, tare, milk);
   const captureMilk = button('Capture pitcher + milk', milkActions, () => {
-    const size = pitcher.value, pitcherGrams = Number(field(size + 'JugGrams')?.value);
+    const size = pitcher.value, pitcherGrams = Number(field(size + 'PitcherGrams')?.value);
     if (!sizes.includes(size) || !(pitcherGrams >= 1 && pitcherGrams <= 3000)) throw new Error('Configure and choose a pitcher first.');
     const total = weight(), milkGrams = Math.round((total - pitcherGrams) * 10) / 10;
     const name = size[0].toUpperCase() + size.slice(1);
@@ -159,15 +159,15 @@ function mountCalibrationPage({ form, labels, save, back, status, request, base,
     const previous = pitcher.value;
     pitcher.replaceChildren();
     for (const size of sizes) {
-      const grams = Number(field(size + 'JugGrams').value);
+      const grams = Number(field(size + 'PitcherGrams').value);
       if (!(grams >= 1 && grams <= 3000)) continue;
       const option = make('option', size[0].toUpperCase() + size.slice(1) + ' (' + grams + ' g)'); option.value = size; pitcher.append(option);
     }
-    if (sizes.includes(previous) && Number(field(previous + 'JugGrams').value) >= 1) pitcher.value = previous;
+    if (sizes.includes(previous) && Number(field(previous + 'PitcherGrams').value) >= 1) pitcher.value = previous;
     paint();
   }
   form.addEventListener('input', event => {
-    if (event.target === pitcher || event.target?.name?.endsWith('JugGrams')) { clearCapture(); updatePitchers(); }
+    if (event.target === pitcher || event.target?.name?.endsWith('PitcherGrams')) { clearCapture(); updatePitchers(); }
 
   });
   pitcher.addEventListener('change', () => { clearCapture(); paint(); });

@@ -4,8 +4,8 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
 const source = readFileSync(new URL('../../../assets/plugins/calibrated-steam.reaplugin/plugin.js', import.meta.url), 'utf8');
-const partial = { autoDetect: false, smallJugGrams: 0, mediumJugGrams: 220, largeJugGrams: 0,
-  defaultJug: 'medium', referenceMilkGrams: 150, referenceSeconds: 25,
+const partial = { autoDetect: false, smallPitcherGrams: 0, mediumPitcherGrams: 220, largePitcherGrams: 0,
+  defaultPitcher: 'medium', referenceMilkGrams: 150, referenceSeconds: 25,
   referenceFlow: 1.5 };
 
 async function page(settings = partial, failSave = false, guidedRun = false) {
@@ -28,9 +28,11 @@ async function page(settings = partial, failSave = false, guidedRun = false) {
     set id(value) { this.elementId = value; ids[value] = this; }
     get id() { return this.elementId; }
     get parentElement() { return this.parent; }
+    get textContent() { return this.children.length ? this.children.map(child => child.textContent).join('') : (this._textContent || ''); }
+    set textContent(value) { this.children = []; this._textContent = value; }
     focus() { this.focused = true; }
     append(...children) { for (const child of children) { if (child.parent) child.parent.children = child.parent.children.filter(item => item !== child); this.children.push(child); child.parent = this; if (this.tag === 'select' && !this.value) this.value = child.value; } }
-    replaceChildren() { this.children = []; this.value = ''; }
+    replaceChildren(...children) { this.children = []; this._textContent = ''; this.value = ''; this.append(...children); }
     closest(tag) { return this.tag === tag ? this : this.parent?.closest(tag); }
     setAttribute(key, value) { this[key] = value; }
     insertBefore(child, before) { this.children.splice(this.children.indexOf(before), 0, child); child.parent = this; }
@@ -84,7 +86,7 @@ async function page(settings = partial, failSave = false, guidedRun = false) {
 
 test('standalone form exposes only configured starting pitchers and a working return link', async () => {
   const p = await page();
-  assert.deepEqual(p.fields.defaultJug.children.map(option => option.value), ['medium']);
+  assert.deepEqual(p.fields.defaultPitcher.children.map(option => option.value), ['medium']);
   assert.equal(p.ids['automatic-fields'].hidden, true);
   assert.equal(p.fields.singleDrinkGrams.required, false);
   assert.equal(p.ids['return-settings'].href, p.returnTo);
@@ -103,8 +105,8 @@ test('enabling Auto reveals required fields and incomplete Auto cannot save or n
   await p.change();
   assert.equal(p.ids['automatic-fields'].hidden, false);
   assert.equal(p.fields.singleDrinkGrams.required, true);
-  assert.equal(p.fields.singleDrinkJug.required, true);
-  assert.ok(!p.fields.defaultJug.children.some(option => option.value === 'auto'));
+  assert.equal(p.fields.singleDrinkPitcher.required, true);
+  assert.ok(!p.fields.defaultPitcher.children.some(option => option.value === 'auto'));
   await p.submit();
   assert.deepEqual(p.calls, ['status']);
   assert.deepEqual(p.navigations, []);
@@ -127,14 +129,14 @@ test('tare waits for zero before capturing a stable empty pitcher weight', async
   await tare.handlers.click();
   for (let i = 0; i < 10; i++) p.scale(150);
   await set.handlers.click();
-  assert.equal(p.fields.smallJugGrams.value, '');
+  assert.equal(p.fields.smallPitcherGrams.value, '');
   assert.match(set.parent.children.at(-1).textContent, /stable zero/);
   assert.notEqual(set.parent.tag, 'label');
   for (let i = 0; i < 12; i++) p.scale(0);
   for (let i = 0; i < 12; i++) p.scale(155.5);
   await set.handlers.click();
-  assert.equal(p.fields.smallJugGrams.value, '155.5');
-  assert.ok(p.fields.defaultJug.children.some(option => option.value === 'small'));
+  assert.equal(p.fields.smallPitcherGrams.value, '155.5');
+  assert.ok(p.fields.defaultPitcher.children.some(option => option.value === 'small'));
   assert.ok(p.calls.includes('tare'));
 });
 
@@ -300,4 +302,24 @@ test('invalid planned range cannot reuse old points or save until corrected', as
   p.ids['flow-minimum'].value = '0.4'; await p.ids['flow-minimum'].handlers.change();
   assert.equal(p.ids['flow-use-reading'].disabled, false);
   assert.equal(p.fields.referenceSeconds.value, '');
+});
+
+test('configured pitcher badges follow valid choices and keep calibration readiness separate', async () => {
+  const p = await page({ ...partial, referenceSeconds: 0 });
+  const badges = () => p.ids['configuration-summary'].children.filter(child => child.className === 'configured-pitcher').map(child => child.textContent);
+  assert.deepEqual(badges(), ['M']);
+  assert.match(p.ids['configuration-summary'].textContent, /setup required/);
+  p.fields.smallPitcherGrams.value = '150';
+  p.fields.largePitcherGrams.value = '300';
+  p.fields.autoDetect.checked = true;
+  await p.change();
+  assert.deepEqual(badges(), ['S', 'M', 'L']);
+  p.fields.singleDrinkGrams.value = '160';
+  p.fields.singleDrinkPitcher.value = 'small';
+  await p.change();
+  assert.deepEqual(badges(), ['S', 'M', 'L', 'Auto']);
+  p.fields.autoDetect.checked = false;
+  p.fields.smallPitcherGrams.value = '';
+  await p.change();
+  assert.deepEqual(badges(), ['M', 'L']);
 });

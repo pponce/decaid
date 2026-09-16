@@ -6,8 +6,8 @@ import vm from 'node:vm';
 const asset = new URL('../../../assets/plugins/calibrated-steam.reaplugin/', import.meta.url);
 const source = readFileSync(new URL('plugin.js', asset), 'utf8');
 const manifest = JSON.parse(readFileSync(new URL('manifest.json', asset), 'utf8'));
-const valid = { autoDetect: true, smallJugGrams: 150, mediumJugGrams: 220, largeJugGrams: 300, singleDrinkGrams: 160,
-  singleDrinkJug: 'small', weightMode: 'gross', referenceMilkGrams: 150, referenceSeconds: 25,
+const valid = { autoDetect: true, smallPitcherGrams: 150, mediumPitcherGrams: 220, largePitcherGrams: 300, singleDrinkGrams: 160,
+  singleDrinkPitcher: 'small', weightMode: 'gross', referenceMilkGrams: 150, referenceSeconds: 25,
   referenceFlow: 1.5 };
 function plugin(settings = valid) {
   const context = vm.createContext({});
@@ -27,7 +27,7 @@ test('built plugin runs without DOM, timers, network or other host capabilities'
   assert.equal(instance.id, manifest.id);
   const status = call(instance, 'status');
   assert.equal(status.json.ready, true);
-  assert.equal(status.json.apiVersion, 3);
+  assert.equal(status.json.apiVersion, 4);
 });
 
 test('fresh installs expose configuration requirements, never invented working values', () => {
@@ -40,10 +40,17 @@ test('fresh installs expose configuration requirements, never invented working v
 test('calculate endpoint returns calibration flow and duration patch and calibration revision', () => {
   const response = call(plugin(), 'calculate', 'POST', {
     samples: [800, 400, 0].map(ageMs => ({ weightGrams: 330, ageMs })),
-    jug: 'auto', machineState: 'idle', steamFlow: 1.5, steamTemperature: 150, stopAtTemperature: 0,
+    pitcher: 'auto', machineState: 'idle', steamFlow: 1.5, steamTemperature: 150, stopAtTemperature: 0,
   });
   assert.equal(response.status, 200);
   assert.equal(response.json.durationSeconds, 30);
+  assert.equal(response.json.pitcher, 'small');
+  assert.equal(response.json.pitcherGrams, 150);
+  assert.equal(response.json.pitcherSource, 'heuristic');
+  assert.ok(!Object.keys(response.json).some(key => /jug/i.test(key)));
+  const status = call(plugin(), 'status').json;
+  assert.ok(!Object.keys(status.settings).some(key => /jug/i.test(key)));
+  assert.ok(!Object.keys(status.schema).some(key => /jug/i.test(key)));
   assert.deepEqual(response.json.workflowPatch, { steamSettings: { duration: 30, flow: 1.5 } });
   assert.equal(JSON.parse(response.json.calibrationRevision).referenceSeconds, 25);
 });
@@ -80,7 +87,7 @@ test('status advertises only configured pitcher choices and Auto is opt-in', () 
   assert.deepEqual(fresh.availablePitchers, []);
   assert.equal(fresh.settings.autoDetect, false);
   assert.equal(fresh.settings.singleDrinkGrams, 0);
-  const partial = call(plugin({ ...valid, autoDetect: false, smallJugGrams: 0, largeJugGrams: 0, defaultJug: 'medium', singleDrinkGrams: 0 }), 'status').json;
+  const partial = call(plugin({ ...valid, autoDetect: false, smallPitcherGrams: 0, largePitcherGrams: 0, defaultPitcher: 'medium', singleDrinkGrams: 0 }), 'status').json;
   assert.equal(partial.ready, true);
   assert.deepEqual(partial.availablePitchers, ['medium']);
 });
@@ -107,11 +114,11 @@ test('multiple-flow status and calculations survive settings serialization and p
   const instance = plugin(JSON.parse(JSON.stringify(settings)));
   const status = call(instance, 'status').json;
   assert.equal(status.ready, true);
-  assert.equal(status.apiVersion, 3);
+  assert.equal(status.apiVersion, 4);
   assert.equal(status.flowCalibration.adjustable, true);
   assert.equal(status.flowCalibration.minimum, 0.4);
   assert.equal(status.flowCalibration.maximum, 2.5);
-  const input = { samples: [800, 400, 0].map(ageMs => ({ weightGrams: 350, ageMs })), jug: 'small', machineState: 'idle', stopAtTemperature: 0, flow: 1.45 };
+  const input = { samples: [800, 400, 0].map(ageMs => ({ weightGrams: 350, ageMs })), pitcher: 'small', machineState: 'idle', stopAtTemperature: 0, flow: 1.45 };
   assert.equal(call(instance, 'calculate', 'POST', input).json.durationSeconds, 25);
   assert.equal(call(instance, 'calculate', 'POST', { ...input, flow: 2.6 }).json.code, 'flow_out_of_range');
   instance.onLoad(status.settings);

@@ -13,9 +13,9 @@ heater target together with duration. Manual steam settings are captured before
 Auto and restored on exit. Automatic settings are not persisted as manual values;
 normal reconciliation must not replay manual values over an active Auto session.
 
-Remember the jug choice and enough session state to recover manual settings after
+Remember the pitcher choice and enough session state to recover manual settings after
 a reload. Reject stale readings and busy-machine operations; defer resets or
 restoration until idle when the machine is already running. Keep Damian's exact
-jug heuristics. Settings own the calibration; the skin owns mode transitions,
+pitcher heuristics. Settings own the calibration; the skin owns mode transitions,
 workflow application and scale observations. Update the API contract for the
 flow/heater patch and document the change for other skins.

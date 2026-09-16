@@ -41,9 +41,9 @@ function settingsBrowser(resolveReturnUrl, mountCalibration, captureWeight, pitc
   function updateChoices() {
     const current = values();
     document.getElementById('automatic-fields').hidden = !current.autoDetect;
-    for (const key of ['singleDrinkGrams', 'singleDrinkJug']) field(key).required = current.autoDetect;
+    for (const key of ['singleDrinkGrams', 'singleDrinkPitcher']) field(key).required = current.autoDetect;
     const choices = pitcherChoices(current);
-    const select = field('defaultJug'), previous = select.value;
+    const select = field('defaultPitcher'), previous = select.value;
     select.replaceChildren();
     for (const choice of choices) {
       const option = make('option', choice === 'auto' ? 'Auto' : choice[0].toUpperCase() + choice.slice(1));
@@ -53,9 +53,17 @@ function settingsBrowser(resolveReturnUrl, mountCalibration, captureWeight, pitc
     select.disabled = guided?.isActive() || choices.length === 0;
     const names = { small: 'S', medium: 'M', large: 'L', auto: 'Auto' };
     const missing = Object.keys(names).filter(key => !choices.includes(key));
-    summary.textContent = 'Configured: ' + (choices.map(key => names[key]).join(', ') || 'none') +
-      (missing.length ? ' · Not configured: ' + missing.map(key => names[key]).join(', ') : '') +
-      ' · Calibration: ' + (validateConfiguration(values()).length ? 'setup required' : 'ready');
+    summary.replaceChildren(make('span', 'Configured: '));
+    for (const choice of choices) {
+      const badge = make('span', names[choice]);
+      badge.className = 'configured-pitcher';
+      summary.append(badge);
+    }
+    if (!choices.length) summary.append(make('span', 'none'));
+    if (missing.length) summary.append(make('span', ' · Not configured: ' + missing.map(key => names[key]).join(', ')));
+    const flow = Number(current.referenceFlow);
+    summary.append(make('span', ' · Calibration: ' + (validateConfiguration(values()).length ? 'setup required' : 'ready') +
+      (Number.isFinite(flow) && flow >= 0.4 && flow <= 2.5 ? ' · ' + flow.toFixed(1) + ' ml/s' : '')));
   }
   function syncFlow(value, measured = false) {
     const changed = Number(value) !== Number(flowValue);
@@ -88,13 +96,13 @@ function settingsBrowser(resolveReturnUrl, mountCalibration, captureWeight, pitc
         form.append(panel); panels[name] = panel;
       }
       const groups = [
-        ['general', 'General settings', ['referenceFlow', 'weightMode', 'defaultJug']],
-        ['pitchers', 'Empty pitcher weights', ['smallJugGrams', 'mediumJugGrams', 'largeJugGrams']],
-        ['pitchers', 'Automatic pitcher selection', ['autoDetect', 'singleDrinkGrams', 'singleDrinkJug']],
+        ['general', 'General settings', ['referenceFlow', 'weightMode', 'defaultPitcher']],
+        ['pitchers', 'Empty pitcher weights', ['smallPitcherGrams', 'mediumPitcherGrams', 'largePitcherGrams']],
+        ['pitchers', 'Automatic pitcher selection', ['autoDetect', 'singleDrinkGrams', 'singleDrinkPitcher']],
         ['calibration', 'Manual calibration / measured values', ['referenceMilkGrams', 'referenceSeconds']],
       ];
-      const captions = { smallJugGrams: 'Small (g)', mediumJugGrams: 'Medium (g)', largeJugGrams: 'Large (g)', referenceFlow: 'Steam flow (ml/s)', weightMode: 'Scale weight mode', defaultJug: 'Starting pitcher selection' };
-      const hints = { smallJugGrams: 'Empty pitcher. Blank means unused.', mediumJugGrams: 'Empty pitcher. Blank means unused.', largeJugGrams: 'Empty pitcher. Blank means unused.', referenceFlow: 'Shared with Calibration. Used for all Auto steaming.', weightMode: 'Gross: pitcher + milk. Tared: milk only.' };
+      const captions = { smallPitcherGrams: 'Small (g)', mediumPitcherGrams: 'Medium (g)', largePitcherGrams: 'Large (g)', referenceFlow: 'Steam flow (ml/s)', weightMode: 'Scale weight mode', defaultPitcher: 'Starting pitcher selection' };
+      const hints = { smallPitcherGrams: 'Empty pitcher. Blank means unused.', mediumPitcherGrams: 'Empty pitcher. Blank means unused.', largePitcherGrams: 'Empty pitcher. Blank means unused.', referenceFlow: 'Shared with Calibration. Used for all Auto steaming.', weightMode: 'Gross: pitcher + milk. Tared: milk only.' };
       for (const [panelName, heading, keys] of groups) {
         const section = make('fieldset'); section.append(make('legend', heading)); panels[panelName].append(section);
         let automaticFields;
@@ -103,7 +111,7 @@ function settingsBrowser(resolveReturnUrl, mountCalibration, captureWeight, pitc
         }
         for (const key of keys) {
           const item = schema[key]; if (!item) continue;
-          const wrapper = make('div'); wrapper.className = key.endsWith('JugGrams') ? 'field pitcher-field' : 'field';
+          const wrapper = make('div'); wrapper.className = key.endsWith('PitcherGrams') ? 'field pitcher-field' : 'field';
           const label = make('label', captions[key] || item.label); label.htmlFor = 'setting-' + key; wrapper.append(label);
           const input = make(item.type === 'enum' ? 'select' : 'input'); input.name = key; input.id = 'setting-' + key;
           if (item.type === 'enum') {
@@ -159,9 +167,9 @@ function settingsBrowser(resolveReturnUrl, mountCalibration, captureWeight, pitc
 function settingsPage() {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Auto Steam Calculator</title>
 <style>
-:root{color-scheme:light dark;--bg:#f3f5f9;--surface:#fff;--text:#26334a;--muted:#526179;--border:#ccd5e2;--accent:#385a92;--notice:#eef3fb;font:14px/1.45 system-ui,sans-serif}
-@media(prefers-color-scheme:dark){:root{--bg:#172132;--surface:#202b3e;--text:#e4eaf4;--muted:#b6c1d4;--border:#465166;--accent:#456faf;--notice:#2c3c55}}
-*{box-sizing:border-box}body{max-width:940px;margin:auto;padding:16px;background:var(--bg);color:var(--text)}header{display:flex;gap:14px;align-items:center;flex-wrap:wrap}h1{font-size:22px;font-weight:600;margin:0}h2{font-size:16px;margin:0}p{margin:10px 0}button,a,input,select{touch-action:manipulation}button,input,select{font:inherit;color:var(--text);background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px;min-height:44px}input,select{font-size:16px;min-width:0;width:100%}input[type=checkbox]{width:24px;height:24px;min-height:24px;accent-color:var(--accent)}button{cursor:pointer}button:disabled{opacity:.5;cursor:default}a{color:var(--accent)}#return-settings{display:inline-block;padding:10px 14px;min-height:44px;text-decoration:none;border:1px solid var(--border);border-radius:8px;background:var(--surface)}#configuration-summary{color:var(--muted);margin:12px 0}#settings-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}#settings-tabs [aria-selected=true],button[aria-pressed=true],#save{background:var(--accent);color:#fff;border-color:transparent}[hidden]{display:none!important}fieldset{border:1px solid var(--border);border-radius:10px;background:var(--surface);padding:14px;margin:0 0 14px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}legend{font-size:16px;font-weight:600;padding:0 5px}.field{display:grid;gap:6px;align-content:start}.field label{font-weight:500}.field small{color:var(--muted)}.field-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;grid-column:1/-1}.pitcher-field{grid-column:1/-1;grid-template-columns:95px minmax(90px,1fr) auto;align-items:center;border-top:1px solid var(--border);padding-top:12px}.pitcher-field small{grid-column:2/-1}.pitcher-field .capture-button{grid-column:3;grid-row:1}.pitcher-field .capture-result{grid-column:1/-1;margin:0}.full-width{grid-column:1/-1}.scale-tools{display:flex;align-items:center;gap:12px;justify-content:space-between;flex-wrap:wrap}.scale-tools p{margin:0}.local-status{background:var(--notice);padding:9px 11px;border-radius:6px;overflow-wrap:anywhere}.guided-calibration{display:block}.calibration-actions{display:flex;flex-wrap:wrap;gap:10px;margin:12px 0}.calibration-timer{font-size:28px;font-variant-numeric:tabular-nums}.calibration-flow{max-width:220px;margin-bottom:12px}.guided-step{padding:12px 0;border-top:1px solid var(--border)}#status{min-height:1.5em;overflow-wrap:anywhere}.save-row{display:flex;align-items:center;gap:14px;justify-content:space-between;flex-wrap:wrap}footer{font-size:12px;color:var(--muted);margin-top:14px}details{margin-top:12px}summary{cursor:pointer;min-height:44px;padding:10px 0}
+:root{color-scheme:light dark;--bg:#f3f5f9;--surface:#fff;--text:#26334a;--muted:#526179;--border:#ccd5e2;--accent:#385a92;--notice:#eef3fb;--configured-bg:#def4e4;--configured-text:#24533a;font:14px/1.45 system-ui,sans-serif}
+@media(prefers-color-scheme:dark){:root{--bg:#172132;--surface:#202b3e;--text:#e4eaf4;--muted:#b6c1d4;--border:#465166;--accent:#456faf;--notice:#2c3c55;--configured-bg:#234136;--configured-text:#bde4ca}}
+*{box-sizing:border-box}body{max-width:940px;margin:auto;padding:16px;background:var(--bg);color:var(--text)}header{display:flex;gap:14px;align-items:center;flex-wrap:wrap}h1{font-size:22px;font-weight:600;margin:0}h2{font-size:16px;margin:0}p{margin:10px 0}button,a,input,select{touch-action:manipulation}button,input,select{font:inherit;color:var(--text);background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px;min-height:44px}input,select{font-size:16px;min-width:0;width:100%}input[type=checkbox]{width:24px;height:24px;min-height:24px;accent-color:var(--accent)}button{cursor:pointer}button:disabled{opacity:.5;cursor:default}a{color:var(--accent)}#return-settings{display:inline-block;padding:10px 14px;min-height:44px;text-decoration:none;border:1px solid var(--border);border-radius:8px;background:var(--surface)}#configuration-summary{display:flex;align-items:center;flex-wrap:wrap;gap:8px;color:var(--muted);margin:12px 0}.configured-pitcher{display:inline-block;background:var(--configured-bg);color:var(--configured-text);padding:5px 10px;border-radius:7px}#settings-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}#settings-tabs [aria-selected=true],button[aria-pressed=true],#save{background:var(--accent);color:#fff;border-color:transparent}[hidden]{display:none!important}fieldset{border:1px solid var(--border);border-radius:10px;background:var(--surface);padding:14px;margin:0 0 14px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}legend{font-size:16px;font-weight:600;padding:0 5px}.field{display:grid;gap:6px;align-content:start}.field label{font-weight:500}.field small{color:var(--muted)}.field-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;grid-column:1/-1}.pitcher-field{grid-column:1/-1;grid-template-columns:95px minmax(90px,1fr) auto;align-items:center;border-top:1px solid var(--border);padding-top:12px}.pitcher-field small{grid-column:2/-1}.pitcher-field .capture-button{grid-column:3;grid-row:1}.pitcher-field .capture-result{grid-column:1/-1;margin:0}.full-width{grid-column:1/-1}.scale-tools{display:flex;align-items:center;gap:12px;justify-content:space-between;flex-wrap:wrap}.scale-tools p{margin:0}.local-status{background:var(--notice);padding:9px 11px;border-radius:6px;overflow-wrap:anywhere}.guided-calibration{display:block}.calibration-actions{display:flex;flex-wrap:wrap;gap:10px;margin:12px 0}.calibration-timer{font-size:28px;font-variant-numeric:tabular-nums}.calibration-flow{max-width:220px;margin-bottom:12px}.guided-step{padding:12px 0;border-top:1px solid var(--border)}#status{min-height:1.5em;overflow-wrap:anywhere}.save-row{display:flex;align-items:center;gap:14px;justify-content:space-between;flex-wrap:wrap}footer{font-size:12px;color:var(--muted);margin-top:14px}details{margin-top:12px}summary{cursor:pointer;min-height:44px;padding:10px 0}
 @media(max-width:480px){body{padding:12px}fieldset,.field-grid{grid-template-columns:1fr}.pitcher-field{grid-template-columns:65px minmax(60px,1fr)}.pitcher-field .capture-button{grid-column:2;grid-row:auto}.pitcher-field small{grid-column:1/-1}}
 </style></head><body>
 <header><a id="return-settings" href="/api/v1/plugins/settings.reaplugin/ui">← Settings</a><h1>Auto Steam Calculator</h1></header>

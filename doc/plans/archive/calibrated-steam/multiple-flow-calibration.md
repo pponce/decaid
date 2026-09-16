@@ -4,7 +4,7 @@ Keep existing settings as single-flow calibrations. Add an opt-in multiple-flow 
 
 The approved compact Calibration tab offers Single flow and Multiple flows. Multiple flows asks for minimum, maximum, count (three recommended), target milk weight and default flow, then guides the user through evenly spaced readings. Each reading accepts manual measurements or the existing host-owned guided run. Every guided run applies and verifies its specific flow before Start is available. Capture fresh milk each time, retain readings only in the draft, and save the complete calibration atomically. Preserve prior saved configuration until Save.
 
-Store the readings as a JSON string in the plugin's supported string setting type; expose parsed range/readings through an additive API v3 status capability. Keep the existing single-flow fields and request defaults compatible with older skins.
+Store the readings as a JSON string in the plugin's supported string setting type; expose parsed range/readings through the flowCalibration status capability. Single-flow fields and request defaults share the same contract.
 
 In Streamline, single-flow Auto hides both adjustment buttons. Valid multiple-flow Auto exposes them for flow changes within the calibrated range, resets duration to Off and requires another pitcher tap. Manual Flow and Time retain their normal controls. Preserve background reset coalescing and manual-setting restoration.
 

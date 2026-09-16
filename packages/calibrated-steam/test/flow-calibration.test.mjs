@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import { calculate, validateSettings } from '../src/core.mjs';
 import { proposedFlows, flowCalibration } from '../src/flow-calibration.mjs';
 
-const base = { smallJugGrams: 150, mediumJugGrams: 0, largeJugGrams: 0, autoDetect: false,
-  weightMode: 'gross', defaultJug: 'small', referenceFlow: 1.5, referenceMilkGrams: 200, referenceSeconds: 40 };
-const input = flow => ({ jug: 'small', flow, machineState: 'idle', stopAtTemperature: 0,
+const base = { smallPitcherGrams: 150, mediumPitcherGrams: 0, largePitcherGrams: 0, autoDetect: false,
+  weightMode: 'gross', defaultPitcher: 'small', referenceFlow: 1.5, referenceMilkGrams: 200, referenceSeconds: 40 };
+const input = flow => ({ pitcher: 'small', flow, machineState: 'idle', stopAtTemperature: 0,
   samples: [800, 400, 0].map(ageMs => ({ ageMs, weightGrams: 350 })) });
 const readings = [{ flow: 0.4, milkGrams: 200, seconds: 40 }, { flow: 2.5, milkGrams: 100, seconds: 5 }];
 const multi = list => ({ ...base, calibrationMode: 'multiple', flowReadings: JSON.stringify(list) });

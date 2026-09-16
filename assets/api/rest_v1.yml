@@ -3109,7 +3109,7 @@ paths:
                 type: object
                 required: [apiVersion, version, ready, availablePitchers, settings, errors, schema, calibrationActive]
                 properties:
-                  apiVersion: {type: integer, enum: [3]}
+                  apiVersion: {type: integer, enum: [4]}
                   version: {type: string}
                   ready: {type: boolean}
                   calibrationActive:
@@ -3262,7 +3262,7 @@ paths:
               type: object
               required: [samples, machineState, stopAtTemperature]
               properties:
-                jug:
+                pitcher:
                   type: string
                   enum: [auto, small, medium, large]
                   default: auto
@@ -3294,16 +3294,16 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [apiVersion, jug, jugSource, scaleGrams, jugGrams, milkGrams, durationSeconds, workflowPatch, calibrationRevision]
+                required: [apiVersion, pitcher, pitcherSource, scaleGrams, pitcherGrams, milkGrams, durationSeconds, workflowPatch, calibrationRevision]
                 properties:
-                  apiVersion: {type: integer, enum: [3]}
-                  jug:
+                  apiVersion: {type: integer, enum: [4]}
+                  pitcher:
                     type: string
                     nullable: true
                     enum: [small, medium, large, null]
-                  jugSource: {type: string, enum: [heuristic, manual, tared]}
+                  pitcherSource: {type: string, enum: [heuristic, manual, tared]}
                   scaleGrams: {type: number}
-                  jugGrams: {type: number}
+                  pitcherGrams: {type: number}
                   milkGrams: {type: number, minimum: 10, maximum: 1500}
                   durationSeconds: {type: integer, minimum: 1, maximum: 255}
                   calibrationRevision:

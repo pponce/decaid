@@ -20,5 +20,5 @@ calibration request. See the guide for lease, cancellation and restoration limit
 `flow-calibration.mjs` validates measured flow points and interpolates seconds per
 gram between adjacent readings. `flow-calibration-page.js` owns the draft
 single/multiple reading workflow; it reuses the host-owned guided session for
-each reading. Old settings remain single-flow; multiple readings use the existing
+each reading. Single flow is the default; multiple readings use the existing
 string setting type without adding a plugin-host schema requirement.
