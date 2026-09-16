@@ -63,6 +63,25 @@ test('configuration validation is read-only and reload replaces calculation sett
   assert.equal(call(instance, 'status').json.settings.referenceSeconds, 30);
 });
 
+test('planning targets persist as metadata without changing calculated time or workflow settings', () => {
+  const input = {
+    samples: [800, 400, 0].map(ageMs => ({ weightGrams: 330, ageMs })),
+    pitcher: 'small', machineState: 'idle', stopAtTemperature: 0,
+  };
+  const baseline = call(plugin(), 'calculate', 'POST', input).json;
+  for (const targetTemperatureC of [0, 55, 65]) {
+    const instance = plugin({ ...valid, targetMilkGrams: 160, targetTemperatureC });
+    const saved = call(instance, 'status').json.settings;
+    assert.equal(saved.targetMilkGrams, 160);
+    assert.equal(saved.referenceMilkGrams, 150);
+    assert.equal(saved.targetTemperatureC, targetTemperatureC);
+    instance.onLoad(JSON.parse(JSON.stringify(saved)));
+    const result = call(instance, 'calculate', 'POST', input).json;
+    assert.equal(result.durationSeconds, baseline.durationSeconds);
+    assert.deepEqual(result.workflowPatch, baseline.workflowPatch);
+  }
+});
+
 test('disabled, wrong-method and unknown-endpoint requests are explicit failures', () => {
   const instance = plugin();
   assert.equal(call(instance, 'calculate', 'GET').status, 405);

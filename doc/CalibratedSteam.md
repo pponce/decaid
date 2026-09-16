@@ -13,8 +13,8 @@ from **Extensions > Plugins > Open**. Both entry points provide a return address
 **Return to settings** leaves without saving, and a successful **Save calibration**
 returns to the calling settings page. Validation or save errors keep the form open.
 
-The settings page uses compact **General**, **Pitchers & Auto**, and **Calibration**
-tabs. General contains scale weight mode, starting pitcher selection and steam
+The settings page uses compact **General**, **Pitchers & Auto**, **Calibration**,
+**Instructions**, and **Glossary** tabs. General contains scale weight mode, starting pitcher selection and steam
 flow. The summary separates configured choices from calibration readiness and
 updates as the draft changes. Configured S, M, L and Auto choices have green
 badges; missing choices and calibration readiness remain separate text. Save is
@@ -38,6 +38,9 @@ tab and manual-values section containing the first invalid setting.
    Damian's existing heuristic needs all three pitcher weights and gross scale
    weight. Auto is not offered until these inputs are valid; it is opt-in.
 3. Choose a starting selection from the configured sizes (and Auto, if ready).
+   With no configured pitchers, the selector says **Configure Pitchers & Auto
+   first**. Configuring the first pitcher selects it automatically; adding other
+   pitchers preserves that selection. You can change it in General before saving.
    Streamline remembers subsequent choices separately and falls back to the saved
    starting choice if the previously selected pitcher is removed.
 4. Choose **Single flow** or **Multiple flows** in Calibration (details below),
@@ -48,7 +51,7 @@ tab and manual-values section containing the first invalid setting.
    temperature using **Stop steam** or the machine control. Physical start also
    works after preparation. The page fills the measured weight, time and flow.
    Alternatively, choose **Enter measured time** for each reading and enter values
-   measured using normal manual steam controls. Select **Use reading & next**
+   measured using normal manual steam controls. Select **Use values and next**
    between readings, then review the completed set.
 5. Save. Use similar milk, starting temperature and technique on later runs.
 
@@ -107,7 +110,18 @@ four adds two evenly spaced interior points, rounded to 0.1 ml/s. A range must
 allow distinct points at least 0.1 ml/s apart. For 0.4–2.5 ml/s, the four points
 are 0.4, 1.1, 1.8 and 2.5 ml/s. The default Auto flow must lie within that range.
 
-Set a target milk weight for all readings. For each point, use the same pitcher,
+Set **Target milk per reading (g)** to the amount you intend to prepare. This is
+saved independently from the actual measured milk weight: a 160 g target stays
+160 g when a reading uses 158 g. Calculations use the actual measurement.
+
+**Target calibration temperature (°C)** is an optional milk-temperature note,
+initially blank. It does not set the steam heater, stop steam, or change calculated
+time. Aim for the same target for every reading. If you later calibrate to a
+different temperature, update this note and repeat the readings for that target.
+The note appears alongside the flow, actual milk weight and time in each compact
+summary. Editing the note alone does not adjust existing measurements.
+
+For each point, use the same pitcher,
 milk starting temperature, target temperature, heater setting and technique. Use
 fresh milk for each run, not milk already heated by the previous reading. Record
 the actual milk weight if it differs slightly from the target.
@@ -118,8 +132,11 @@ the default Auto flow. Start remains unavailable until preparation completes and
 rechecks the workflow's flow, duration and probe-stop settings before requesting
 steam. No successful result is returned until prior steam settings are restored.
 
-Select **Use reading & next** after each measurement, then review the complete
-set. **Redo** returns to a reading. Changing the planned range/count clears the
+Select **Use values and next** after each measurement, then **Use values and
+review** to see the compact summaries. Saved calibrations reopen in this compact
+view. Each **Edit** button opens its reading for manual adjustment or a new guided
+run. Accepting an edit returns to review when all readings are complete and retains
+the other measurements. Changing the planned range/count clears the
 draft readings; editing a captured reading requires using it again. Save stores
 the complete set through one settings request. Until Save, the previous saved
 calibration remains active; leaving without saving discards the draft. The page
@@ -250,6 +267,13 @@ skins should use the shared settings page instead of exposing raw JSON. The
 in multiple mode the readings are authoritative. `referenceFlow` is the shared
 fixed/default flow, with a default of 0.4. Changing that default does not mutate
 multiple readings.
+
+`targetMilkGrams` is the planned milk quantity (default 200 g), separate from
+`referenceMilkGrams` and each reading's actual `milkGrams`. `targetTemperatureC`
+is an optional shared milk-temperature note (0 means unspecified). Neither field
+is used by the duration calculation or sent as a machine setting. Skins should
+preserve these settings when editing configuration; using the shared settings
+page handles this automatically.
 
 A `calculate` body may include optional numeric `flow`. If omitted, the plugin
 uses `referenceFlow`. Single mode

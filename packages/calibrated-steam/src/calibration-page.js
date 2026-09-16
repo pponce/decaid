@@ -121,7 +121,7 @@ function mountCalibrationPage({ form, labels, save, back, status, request, base,
       appliedResult = true; captured = null;
       flowPlan.acceptMeasurement(value.result);
       review.open = true;
-      runStatus.textContent = 'Measured ' + value.result.milkGrams + ' g milk in ' + value.result.seconds + ' s at ' + value.result.flow + ' ml/s. Select Use reading to continue, or capture fresh milk to try again.';
+      runStatus.textContent = 'Measured ' + value.result.milkGrams + ' g milk in ' + value.result.seconds + ' s at ' + value.result.flow + ' ml/s. Select Use values to continue, or capture fresh milk to try again.';
     }
     paint(); schedule();
     if (returnAfterRestore && !active) { closed = true; window.location.assign(back.href); }

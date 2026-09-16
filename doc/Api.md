@@ -747,6 +747,9 @@ Auto Steam Calculator uses calculator API 4 (duration and flow only).
 Requests select `pitcher`; responses include `pitcher`, `pitcherSource` and
 `pitcherGrams`. Pitcher settings use `smallPitcherGrams`, `mediumPitcherGrams`,
 `largePitcherGrams`, `singleDrinkPitcher` and `defaultPitcher`.
+`targetMilkGrams` stores the planned milk quantity separately from actual measured
+weights. `targetTemperatureC` is an optional milk-temperature note; 0 means unset.
+Neither planning field changes the calculated duration or machine settings.
 Status includes `availablePitchers`, `calibrationActive`, and optional
 `flowCalibration` (mode, adjustable bounds, default and parsed readings; null if
 invalid). `calculate` accepts optional `flow`, defaulting to `referenceFlow`.

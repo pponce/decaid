@@ -3,7 +3,7 @@
   "name": "Auto Steam Calculator",
   "author": "pponce; calculation and pitcher heuristic inspired by Damian / Damian-AU (DSx2)",
   "description": "Estimate steam duration from milk weight using your calibration. Inspired by Damian's DSx2 calculator. This estimates temperature through time; it does not measure milk temperature.",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "apiVersion": 1,
   "permissions": [
     "api",
@@ -54,6 +54,18 @@
         "tared"
       ],
       "default": "gross"
+    },
+    "targetMilkGrams": {
+      "type": "number",
+      "label": "Target milk per reading (g)",
+      "description": "Milk amount to aim for when preparing each reading. Record the actual measured milk separately; for example, a 160 g target can have a 158 g measurement. Measurements never change this target.",
+      "default": 200
+    },
+    "targetTemperatureC": {
+      "type": "number",
+      "label": "Target calibration temperature (°C)",
+      "description": "Optional milk-temperature note only. It does not control the heater, stop steam or adjust calculated time. Aim for this same temperature for every reading. Update it and repeat the readings if you calibrate at a different temperature.",
+      "default": 0
     },
     "referenceMilkGrams": {
       "type": "number",

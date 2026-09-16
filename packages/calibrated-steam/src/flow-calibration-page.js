@@ -34,20 +34,22 @@ function mountFlowCalibrationPage({ form, labels, field, updateChoices, syncFlow
   range.append(minimum.wrapper, maximum.wrapper, count.wrapper);
   const recommendation = make('p', 'Choose 3 or 4 readings for a wider range or a better estimate between measured flows.'); recommendation.className = 'full-width'; range.append(recommendation);
   const flowSlot = make('div'); config.append(flowSlot);
-  const target = input('Target milk per reading (g)', Number(field('referenceMilkGrams').value) || 200);
-  target.element.id = 'flow-target-milk'; target.element.min = '10'; target.element.max = '1500'; target.element.step = '1'; config.append(target.wrapper);
+  const target = { element: field('targetMilkGrams'), wrapper: labels.targetMilkGrams };
+  const temperature = field('targetTemperatureC');
+  controls.push(target.element, temperature);
+  config.append(target.wrapper, labels.targetTemperatureC);
   const notice = make('p'); notice.className = 'local-status full-width'; notice.id = 'flow-calibration-status'; notice.setAttribute('role', 'status'); notice.setAttribute('aria-live', 'polite'); config.append(notice);
   panel.insertBefore(config, manual);
   const steps = make('div'); steps.className = 'calibration-actions'; steps.id = 'flow-reading-steps'; panel.insertBefore(steps, manual);
   const readingPanel = make('section'); readingPanel.id = 'flow-reading-panel'; panel.insertBefore(readingPanel, manual); readingPanel.append(manual);
   const heading = make('h2'); heading.id = 'flow-reading-title'; readingPanel.insertBefore(heading, manual);
-  const instructions = make('p', 'Use fresh milk at the same starting temperature and the same pitcher for each reading. Stop at your usual target temperature.'); readingPanel.insertBefore(instructions, manual);
+  const instructions = make('p', 'Use fresh milk at the same starting temperature and the same pitcher for each reading. Stop at the same target milk temperature for every reading.'); readingPanel.insertBefore(instructions, manual);
   const methods = make('div'); methods.className = 'calibration-actions'; readingPanel.insertBefore(methods, manual);
   const manualButton = addButton('Enter measured time', methods, () => setMethod(false), 'flow-method-manual');
   const guidedButton = addButton('Guided calibration', methods, () => setMethod(true), 'flow-method-guided');
   const actions = make('div'); actions.className = 'calibration-actions'; panel.append(actions);
   const previous = addButton('Previous reading', actions, () => openReading(index - 1), 'flow-previous');
-  const use = addButton('Use reading & next', actions, useReading, 'flow-use-reading');
+  const use = addButton('Use values and next', actions, useReading, 'flow-use-reading');
   const summary = make('fieldset'); summary.id = 'flow-review'; summary.append(make('legend', 'Review calibration')); panel.append(summary);
   const summaryRows = make('div'); summaryRows.className = 'full-width'; summary.append(summaryRows);
   function stored() {
@@ -58,10 +60,10 @@ function mountFlowCalibrationPage({ form, labels, field, updateChoices, syncFlow
   function paint() {
     single.setAttribute('aria-pressed', String(!multiple)); multi.setAttribute('aria-pressed', String(multiple));
     range.hidden = !multiple;
-    steps.hidden = !multiple;
+    steps.hidden = !multiple || reviewing;
     heading.textContent = planValid ? 'Reading ' + (index + 1) + ' of ' + flows.length + ' · ' + currentFlow() + ' ml/s' : 'Choose a valid flow range';
     readingPanel.hidden = reviewing; actions.hidden = reviewing; summary.hidden = !reviewing;
-    use.textContent = index === flows.length - 1 ? 'Use reading & review' : 'Use reading & next';
+    use.textContent = flows.every((flow, i) => i === index || validReading(readings[i])) ? 'Use values and review' : 'Use values and next';
     for (const control of controls) control.disabled = locked;
     previous.disabled = locked || index === 0;
     use.disabled = locked || !planValid || (guidedMode && !measurementReady);
@@ -77,8 +79,9 @@ function mountFlowCalibrationPage({ form, labels, field, updateChoices, syncFlow
     flows.forEach((flow, i) => {
       const row = make('div'); row.className = 'scale-tools';
       const reading = readings[i];
-      row.append(make('p', flow + ' ml/s · ' + (validReading(reading) ? reading.milkGrams + ' g · ' + reading.seconds + ' s' : 'Not captured')));
-      const redo = make('button', 'Redo'); redo.type = 'button'; redo.disabled = locked; redo.addEventListener('click', () => openReading(i)); row.append(redo); summaryRows.append(row);
+      const temperatureNote = Number(temperature.value) > 0 ? temperature.value + ' °C target' : 'Temperature target not noted';
+      row.append(make('p', flow + ' ml/s · ' + (validReading(reading) ? reading.milkGrams + ' g · ' + reading.seconds + ' s · ' + temperatureNote : 'Not captured')));
+      const edit = make('button', 'Edit'); edit.type = 'button'; edit.disabled = locked; edit.addEventListener('click', () => openReading(i)); row.append(edit); summaryRows.append(row);
     });
   }
   function currentFlow() { return !planValid ? NaN : multiple ? flows[index] : Number(field('referenceFlow').value); }
@@ -88,7 +91,7 @@ function mountFlowCalibrationPage({ form, labels, field, updateChoices, syncFlow
     const reading = readings[index];
     field('referenceMilkGrams').value = reading?.milkGrams || target.element.value;
     field('referenceSeconds').value = reading?.seconds || '';
-    notice.textContent = 'Draft readings are saved only when you select Save calibration.';
+    notice.textContent = 'Changes only apply after save.';
     paint();
   }
   function planFlows() {
@@ -117,25 +120,27 @@ function mountFlowCalibrationPage({ form, labels, field, updateChoices, syncFlow
     const reading = { flow: currentFlow(), milkGrams: Number(field('referenceMilkGrams').value), seconds: Number(field('referenceSeconds').value) };
     if (!validReading(reading)) throw new Error('Enter 10–1500 g of milk and 1–255 seconds measured at this flow.');
     readings[index] = reading; stored();
-    if (index < flows.length - 1) openReading(index + 1);
+    const next = flows.findIndex((flow, i) => !validReading(readings[i]));
+    if (next !== -1) openReading(next);
     else {
       reviewing = true;
-      notice.textContent = multiple ? 'Review every reading, then save. Auto flow will be adjustable within this range.' : 'Review the reading, then save. Auto flow will be fixed.';
+      notice.textContent = 'Changes only apply after save.';
       paint();
     }
   }
   for (const element of [minimum.element, maximum.element, count.element]) element.addEventListener('change', planFlows);
-  target.element.addEventListener('change', () => { if (!locked && !validReading(readings[index])) field('referenceMilkGrams').value = target.element.value; });
   form.addEventListener('input', event => {
+    if (event.target === temperature) paint();
     if (event.target === field('referenceMilkGrams') || event.target === field('referenceSeconds')) {
-      if (multiple) { readings[index] = null; stored(); }
+      readings[index] = null; stored();
       measurementReady = false; reviewing = false; paint();
     }
   });
   if (multiple && !readings.length) planFlows();
   if (!multiple) readings = [{ flow: currentFlow(), milkGrams: Number(field('referenceMilkGrams').value), seconds: Number(field('referenceSeconds').value) }];
-  if (multiple) openReading(0);
-  notice.textContent = 'Draft changes · your saved calibration remains active until Save.';
+  reviewing = readings.length === flows.length && readings.every(validReading);
+  if (!reviewing) openReading(Math.max(0, readings.findIndex(reading => !validReading(reading))));
+  notice.textContent = 'Changes only apply after save.';
   paint();
   return {
     currentFlow,
@@ -147,7 +152,7 @@ function mountFlowCalibrationPage({ form, labels, field, updateChoices, syncFlow
       if (result.flow !== currentFlow()) throw new Error('The measurement flow changed. Repeat this reading.');
       field('referenceMilkGrams').value = result.milkGrams;
       field('referenceSeconds').value = result.seconds;
-      if (multiple) { readings[index] = null; stored(); }
+      readings[index] = null; stored();
       measurementReady = true; reviewing = false; paint();
     },
     flowChanged() {
@@ -156,6 +161,9 @@ function mountFlowCalibrationPage({ form, labels, field, updateChoices, syncFlow
     },
     reveal(key) { reviewing = false; if (['referenceMilkGrams', 'referenceSeconds'].includes(key)) guidedMode = false; paint(); },
     assertCanSave() {
+      const milkTarget = Number(target.element.value), temperatureTarget = Number(temperature.value);
+      if (!Number.isFinite(milkTarget) || milkTarget < 10 || milkTarget > 1500) throw Object.assign(new Error('Target milk per reading must be between 10 and 1500 g.'), { field: 'targetMilkGrams' });
+      if (!Number.isFinite(temperatureTarget) || temperatureTarget < 0 || temperatureTarget > 100) throw Object.assign(new Error('Enter a target milk temperature between 0 and 100 °C, or leave the note blank.'), { field: 'targetTemperatureC' });
       if (multiple && (!planValid || flows.length < 2 || readings.length !== flows.length || !readings.every(validReading))) {
         reviewing = false; paint(); throw Object.assign(new Error('Complete and use every flow reading before saving.'), { field: 'flowReadings' });
       }

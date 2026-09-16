@@ -142,6 +142,8 @@ test('tare waits for zero before capturing a stable empty pitcher weight', async
 
 test('calibration offers its own empty-scale tare and captures milk after subtracting the chosen pitcher', async () => {
   const p = await page();
+  await p.buttons('Edit')[0].handlers.click();
+  await p.ids['flow-method-guided'].handlers.click();
   assert.equal(p.buttons('Tare empty scale').length, 2);
   await p.buttons('Tare empty scale')[1].handlers.click();
   for (let i = 0; i < 12; i++) p.scale(0);
@@ -155,6 +157,8 @@ test('calibration offers its own empty-scale tare and captures milk after subtra
 
 test('guided form starts and stops, fills measured values, and saves back to settings', async () => {
   const p = await page(partial, false, true);
+  await p.buttons('Edit')[0].handlers.click();
+  await p.ids['flow-method-guided'].handlers.click();
   await p.buttons('Tare empty scale')[1].handlers.click();
   for (let i = 0; i < 12; i++) p.scale(0);
   for (let i = 0; i < 12; i++) p.scale(380);
@@ -180,6 +184,8 @@ test('guided form starts and stops, fills measured values, and saves back to set
 
 test('Return to settings cancels an active guided run before navigating', async () => {
   const p = await page(partial, false, true);
+  await p.buttons('Edit')[0].handlers.click();
+  await p.ids['flow-method-guided'].handlers.click();
   await p.buttons('Tare empty scale')[1].handlers.click();
   for (let i = 0; i < 12; i++) p.scale(0);
   for (let i = 0; i < 12; i++) p.scale(380);
@@ -223,6 +229,8 @@ test('both Flow inputs edit one saved value and clear the previous calibration t
 
 test('a blocked milk capture explains the missing tare beside its own button', async () => {
   const p = await page();
+  await p.buttons('Edit')[0].handlers.click();
+  await p.ids['flow-method-guided'].handlers.click();
   const capture = p.buttons('Capture pitcher + milk')[0];
   await capture.handlers.click();
   const message = capture.parent.parent.children.at(-1);
@@ -276,6 +284,7 @@ test('guided multiple readings prepare the machine at each planned flow and requ
 test('changing default flow preserves multiple measurements and editing a reading requires use again', async () => {
   const readings = [{ flow: 0.4, milkGrams: 200, seconds: 40 }, { flow: 2.5, milkGrams: 200, seconds: 10 }];
   const p = await page({ ...partial, calibrationMode: 'multiple', flowReadings: JSON.stringify(readings) });
+  await p.buttons('Edit')[0].handlers.click();
   assert.equal(p.fields.referenceSeconds.value, '40');
   p.ids['calibration-flow'].value = '1.0'; await p.ids['calibration-flow'].handlers.input();
   assert.equal(p.fields.referenceSeconds.value, '40');
@@ -288,6 +297,144 @@ test('changing default flow preserves multiple measurements and editing a readin
   await p.submit();
   assert.equal(p.savedSettings[0].referenceFlow, 1);
   assert.equal(JSON.parse(p.savedSettings[0].flowReadings)[0].seconds, 45);
+});
+
+test('empty starting pitcher explains setup and selects the first configured pitcher only once', async () => {
+  const p = await page({});
+  assert.equal(p.fields.defaultPitcher.disabled, true);
+  assert.match(p.fields.defaultPitcher.children[0].textContent, /Pitchers & Auto/);
+  p.fields.mediumPitcherGrams.value = '220'; await p.change();
+  assert.equal(p.fields.defaultPitcher.value, 'medium');
+  p.fields.smallPitcherGrams.value = '150'; await p.change();
+  assert.equal(p.fields.defaultPitcher.value, 'medium');
+  p.fields.defaultPitcher.value = 'small'; await p.change();
+  p.fields.largePitcherGrams.value = '300'; await p.change();
+  assert.equal(p.fields.defaultPitcher.value, 'small');
+  for (const size of ['small', 'medium', 'large']) p.fields[size + 'PitcherGrams'].value = '';
+  await p.change();
+  p.fields.largePitcherGrams.value = '300'; await p.change();
+  assert.equal(p.fields.defaultPitcher.value, 'large');
+});
+
+test('single calibration reopens compactly and preserves target milk separately from measured milk', async () => {
+  const p = await page({ ...partial, targetMilkGrams: 160, targetTemperatureC: 60 });
+  assert.equal(p.ids['flow-review'].hidden, false);
+  assert.equal(p.ids['flow-reading-panel'].hidden, true);
+  assert.match(p.ids['flow-review'].textContent, /60 °C/);
+  await p.buttons('Edit')[0].handlers.click();
+  assert.equal(p.ids['flow-reading-panel'].hidden, false);
+  p.fields.referenceMilkGrams.value = '158';
+  await p.ids.settings.handlers.input({ target: p.fields.referenceMilkGrams });
+  assert.equal(p.ids['flow-use-reading'].textContent, 'Use values and review');
+  await p.ids['flow-use-reading'].handlers.click();
+  assert.match(p.ids['flow-review'].textContent, /158 g/);
+  assert.equal(p.fields.targetMilkGrams.value, '160');
+  await p.submit();
+  assert.equal(p.savedSettings[0].targetMilkGrams, 160);
+  assert.equal(p.savedSettings[0].referenceMilkGrams, 158);
+  const reopened = await page(p.savedSettings[0]);
+  assert.equal(reopened.ids['flow-review'].hidden, false);
+  assert.equal(reopened.ids['flow-reading-panel'].hidden, true);
+  assert.equal(reopened.fields.targetMilkGrams.value, '160');
+  assert.match(reopened.ids['flow-review'].textContent, /158 g.*60 °C/);
+  assert.equal(reopened.ids['flow-calibration-status'].textContent, 'Changes only apply after save.');
+});
+
+test('multiple saved readings all reopen compactly and one edit preserves the other readings', async () => {
+  const readings = [
+    { flow: 0.4, milkGrams: 158, seconds: 40 },
+    { flow: 1.5, milkGrams: 160, seconds: 20 },
+    { flow: 2.5, milkGrams: 159, seconds: 12 },
+  ];
+  const p = await page({ ...partial, calibrationMode: 'multiple', flowReadings: JSON.stringify(readings), targetMilkGrams: 160, targetTemperatureC: 60 });
+  assert.equal(p.ids['flow-review'].hidden, false);
+  assert.equal(p.ids['flow-reading-steps'].hidden, true);
+  assert.equal(p.buttons('Edit').length, 3);
+  await p.buttons('Edit')[1].handlers.click();
+  assert.equal(p.fields.referenceSeconds.value, '20');
+  p.fields.referenceSeconds.value = '21';
+  await p.ids.settings.handlers.input({ target: p.fields.referenceSeconds });
+  assert.equal(p.ids['flow-use-reading'].textContent, 'Use values and review');
+  await p.ids['flow-use-reading'].handlers.click();
+  assert.equal(p.ids['flow-review'].hidden, false);
+  await p.submit();
+  const updated = readings.map((r, i) => i === 1 ? { ...r, seconds: 21 } : r);
+  assert.deepEqual(JSON.parse(p.savedSettings[0].flowReadings), updated);
+  const reopened = await page(p.savedSettings[0]);
+  assert.equal(reopened.ids['flow-review'].hidden, false);
+  assert.equal(reopened.buttons('Edit').length, 3);
+  assert.match(reopened.ids['flow-review'].textContent, /21 s/);
+  assert.equal(reopened.fields.targetTemperatureC.value, '60');
+});
+
+test('guided measurement uses actual milk without overwriting targets or sending the temperature note', async () => {
+  const p = await page({ ...partial, targetMilkGrams: 170, targetTemperatureC: 60 }, false, true);
+  await p.buttons('Edit')[0].handlers.click();
+  await p.ids['flow-method-guided'].handlers.click();
+  await p.buttons('Tare empty scale')[1].handlers.click();
+  for (let i = 0; i < 12; i++) p.scale(0);
+  for (let i = 0; i < 12; i++) p.scale(380);
+  await p.buttons('Capture pitcher + milk')[0].handlers.click();
+  await p.buttons('Prepare calibration')[0].handlers.click();
+  assert.equal(p.fields.targetTemperatureC.disabled, true);
+  assert.equal(p.fields.targetMilkGrams.disabled, true);
+  assert.equal(p.calibrationCalls[0].targetTemperatureC, undefined);
+  assert.equal(p.calibrationCalls[0].heaterTemperature, undefined);
+  assert.equal(p.calibrationCalls[0].milkGrams, 160);
+  await p.buttons('Start steam')[0].handlers.click();
+  await p.buttons('Stop steam')[0].handlers.click();
+  await p.ids['flow-use-reading'].handlers.click();
+  await p.submit();
+  assert.equal(p.savedSettings[0].targetMilkGrams, 170);
+  assert.equal(p.savedSettings[0].referenceMilkGrams, 160);
+  assert.equal(p.savedSettings[0].targetTemperatureC, 60);
+});
+
+test('instructions and glossary are navigable tabs with calibration field guidance', async () => {
+  const p = await page();
+  await p.ids['tab-instructions'].handlers.click();
+  assert.equal(p.ids['panel-instructions'].hidden, false);
+  assert.match(p.ids['panel-instructions'].textContent, /same target milk temperature/);
+  await p.ids['tab-instructions'].handlers.keydown({ key: 'ArrowRight', preventDefault() {} });
+  assert.equal(p.ids['panel-glossary'].hidden, false);
+  assert.match(p.ids['panel-glossary'].textContent, /Target milk per reading/);
+  assert.match(p.ids['panel-glossary'].textContent, /note only/i);
+  await p.ids['tab-glossary'].handlers.keydown({ key: 'ArrowRight', preventDefault() {} });
+  assert.equal(p.ids['panel-general'].hidden, false);
+});
+
+test('planning targets can be changed without reopening or overwriting a saved reading', async () => {
+  const p = await page();
+  p.fields.targetMilkGrams.value = '160';
+  await p.ids.settings.handlers.input({ target: p.fields.targetMilkGrams });
+  p.fields.targetTemperatureC.value = '62';
+  await p.ids.settings.handlers.input({ target: p.fields.targetTemperatureC });
+  assert.equal(p.ids['flow-review'].hidden, false);
+  assert.match(p.ids['flow-review'].textContent, /150 g.*25 s.*62 °C/);
+  await p.submit();
+  const reopened = await page(p.savedSettings[0]);
+  assert.equal(reopened.fields.targetMilkGrams.value, '160');
+  assert.equal(reopened.fields.referenceMilkGrams.value, '150');
+  assert.equal(reopened.fields.referenceSeconds.value, '25');
+  assert.equal(reopened.fields.targetTemperatureC.value, '62');
+});
+
+test('invalid planning values reveal Calibration and can be corrected without losing measured values', async () => {
+  const p = await page();
+  p.fields.targetMilkGrams.value = '';
+  await p.submit();
+  assert.equal(p.savedSettings.length, 0);
+  assert.equal(p.ids['panel-calibration'].hidden, false);
+  assert.equal(p.fields.targetMilkGrams.focused, true);
+  p.fields.targetMilkGrams.value = '160';
+  p.fields.targetTemperatureC.value = '150';
+  await p.submit();
+  assert.equal(p.savedSettings.length, 0);
+  assert.match(p.ids.status.textContent, /0 and 100 °C/);
+  p.fields.targetTemperatureC.value = '';
+  await p.submit();
+  assert.equal(p.savedSettings[0].referenceSeconds, 25);
+  assert.equal(p.savedSettings[0].targetTemperatureC, 0);
 });
 
 test('invalid planned range cannot reuse old points or save until corrected', async () => {
