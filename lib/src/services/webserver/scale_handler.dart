@@ -16,6 +16,25 @@ class ScaleHandler {
        _settingsController = settingsController;
 
   void addRoutes(RouterPlus app) {
+    app.get('/api/v1/scale/<command>', (Request _, String command) async {
+      if (command != 'info') {
+        return jsonNotFound({'error': 'Unknown command: $command'});
+      }
+      try {
+        final scale = _controller.connectedScale();
+        if (scale is! DeviceInformationCapable) return jsonOk({});
+        final information =
+            (scale as DeviceInformationCapable).currentDeviceInformation;
+        final firmwareVersion = information?.firmwareVersion;
+        final batteryLevel = information?.batteryLevel;
+        return jsonOk({
+          'firmwareVersion': ?firmwareVersion,
+          'batteryLevel': ?batteryLevel,
+        });
+      } on DeviceNotConnectedException {
+        return jsonServiceUnavailable({'error': 'No scale connected'});
+      }
+    });
     app.put('/api/v1/scale/<command>', (request, command) async {
       switch (command) {
         case 'tare':

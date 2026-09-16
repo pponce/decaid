@@ -1,6 +1,7 @@
 # Device Management in Decaid
 
 This document explains how devices (DE1 machines, scales, sensors) are discovered, connected, and managed throughout the Decaid application lifecycle.
+Open the management page from Settings > Devices or from the dashboard.
 
 ## Table of Contents
 
@@ -84,6 +85,7 @@ Discovery services are responsible for scanning and creating device instances. E
   - `lib/src/services/serial/serial_service_android.dart` (Android)
   - `lib/src/services/serial/serial_service.dart` (factory)
 - **Discovery:** Enumerates serial ports, probes for device identification
+- **Desktop serial identity:** One canonical id is resolved once per enumerated port: `usb-{vid}-{pid}-{serial}` (plus `-ifNN` for interfaces above 0) when USB descriptors are available, otherwise `serial-<basename>`. Candidates are deduplicated before probing, so a macOS adapter exposed as both `/dev/cu.X` and `/dev/tty.X` appears once and `/dev/cu.X` is the endpoint probed. The resolved id is injected into the transport and is the value used for scan dedup, `Device.deviceId`, remembered devices and API inventory. `serial-<basename>` stays accepted as a legacy quick-connect alias; after a successful alias connect the remembered record and `preferredMachineId` migrate to the canonical id. Android keeps its existing `UsbDevice.deviceId`-suffixed identities.
 - **HDS USB readiness:** `HDSSerial` enables the 10 Hz OpenScale binary stream and remains `connecting` until a checksum-valid weight frame arrives. Its buffered decoder accepts fragmented/coalesced frames mixed with firmware text; only valid weight frames refresh the watchdog.
 
   DE1-family detection uses product names and the normal protocol probe:
@@ -726,6 +728,8 @@ Future<void> connectToDe1(De1Interface de1Interface) async {
 
 Device implementations define their own readiness gate before `ScaleController` adopts them. Acaia requires its first structurally valid weight frame. AtomHeart Eclair likewise waits for its first valid weight frame, with two bounded notification re-subscriptions before a silent connection is rejected. An awake Decent Scale connection requires a recognised FFF4 status or weight frame, retrying the subscription and status probe once after two seconds. A deliberately sleeping reconnect restores the subscription while remaining dark and defers readiness verification until wake. Successful GATT setup or arbitrary notifications alone are not connected readiness. A mute transport is torn down without powering off the scale, and normal ConnectionManager recovery remains responsible for retrying.
 
+Decent Scale sleep is capability-gated but never intentionally disconnects a healthy link. After a connection is confirmed the scale runs an unawaited profile negotiation: the canonical LED ON/status command (`0A 01`, heartbeat byte `00`) followed by the HDS `0x22` voltage probe. Only a valid `0x22` response promotes the connection to Half Decent Scale capabilities (extended commands and power off). `displayOff` sends the shared `0A 00` display-off command and keeps the connection for unknown, original and pre-modern HDS scales; proven HDS SoftSleep (`0A 04`) is attempted first and falls back to `0A 00` on failure. Wake restores the same connection (`0A 01`, or `0A 04 00` then `0A 01` after SoftSleep). Decent Scale no longer advertises `DisconnectToSleepScale`, so `De1StateManager` does not mark it sleeping on machine sleep. Power-off is withheld unless the profile proves support. Capabilities are re-confirmed on every physical connection and are discarded if a response arrives after a reconnect.
+
 **Connection Flow:**
 ```dart
 Future<void> connectToScale(Scale scale) async {
@@ -823,6 +827,28 @@ of vanishing. Cross-transport (BLE/USB/WiFi) by construction.
   serial USB stable id or — on macOS where vid/pid is unreadable — the port
   path). Moving a USB device to a different physical port yields a new id (new
   remembered entry); Forget removes the stale one.
+
+### Connected-session device information
+
+Devices may implement the optional `DeviceInformationCapable` interface for
+connected-session metadata. The Devices page follows that stream and replaces
+subscriptions when a same-ID device instance is rebuilt during reconnect.
+REST clients read connected-scale metadata from `GET /api/v1/scale/info`.
+The `/api/v1/devices` and `/ws/v1/devices` inventories remain inventory-only:
+they do not include `deviceInfo` or emit updates for metadata refreshes.
+
+Skale reads the standard Device Information Firmware Revision String
+(`0x180A` / `0x2A26`) as best-effort metadata after service discovery. Missing,
+empty, malformed, late, or failed reads do not fail the scale connection. The
+opaque revision is cleared on disconnect and is display-only; Decaid does not
+download or install Skale firmware.
+
+Skale also reads the standard Battery Level characteristic (`0x180F` / `0x2A19`)
+on connect and every 30 minutes while connected. Only a single-byte value in
+the device-reported `0..100` range is published; unavailable or invalid reads
+clear the connected-session value. Battery metadata is nullable and appears in
+the Devices UI and the connected-scale `GET /api/v1/scale/info` response when
+available.
 
 ### Bengle integrated scale
 

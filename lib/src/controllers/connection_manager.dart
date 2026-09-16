@@ -1022,6 +1022,7 @@ class ConnectionManager {
       if (device is De1Interface) {
         de1Controller.adoptDevice(device);
         await _disconnectSupervisor.waitForMachine(device.deviceId);
+        await _migrateQuickConnectAlias(remembered.id, device.deviceId);
         _log.info('Quick-connect: machine adopted (${device.deviceId})');
         return device;
       }
@@ -1029,6 +1030,52 @@ class ConnectionManager {
       _log.warning('Quick-connect: machine attempt failed', e, st);
     }
     return null;
+  }
+
+  Future<void> _migrateQuickConnectAlias(
+    String rememberedId,
+    String canonicalId,
+  ) async {
+    if (rememberedId == canonicalId) return;
+    final registry = rememberedDevices;
+    if (registry == null) return;
+    final movesPreferred =
+        settingsController.preferredMachineId == rememberedId;
+    if (movesPreferred) {
+      try {
+        await settingsController.setPreferredMachineId(canonicalId);
+      } catch (e, st) {
+        _log.warning(
+          'Quick-connect: preferred machine id migration failed for $rememberedId',
+          e,
+          st,
+        );
+        return;
+      }
+    }
+    try {
+      await registry.replaceAliasOnConnect(
+        aliasId: rememberedId,
+        canonicalId: canonicalId,
+      );
+    } catch (e, st) {
+      _log.warning(
+        'Quick-connect: alias migration failed for $rememberedId',
+        e,
+        st,
+      );
+      if (movesPreferred) {
+        try {
+          await settingsController.setPreferredMachineId(rememberedId);
+        } catch (e, st) {
+          _log.warning(
+            'Quick-connect: preferred machine id restore failed for $rememberedId',
+            e,
+            st,
+          );
+        }
+      }
+    }
   }
 
   Future<void> _connectImpl({

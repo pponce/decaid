@@ -147,6 +147,36 @@ cancellation.
 
 **Field triage:** `ScaleWatch` logs sightings at INFO. `Background device watch started` with no `Preferred scale … sighted` → scan/screen problem (this footgun, or unfiltered-scan screen-off suspension). `sighted` with no connect → connect-path problem.
 
+## Decent Scale / HDS Profile Negotiation (#839)
+
+**Symptom:** An original full-height Decent Scale connects and streams weight, then drops with Android GATT 133 during a periodic write; repeated disconnects shortly after the DE1 enters sleep.
+
+**Root cause:** `DecentScale` mixed the shared Decent protocol with HDS-only behaviour — unconditional HDS SoftSleep (`0A 04`), a LED/status write every other 4s maintenance tick, and a trailing heartbeat byte of `01` on tare while heartbeat support is disabled.
+
+**Design:** identity is evidence, capabilities control behaviour. `profile.dart` holds `DecentScaleIdentity`, `DecentScaleCapabilities`, and pure frame parsers; a connection starts conservative and only widens on positive protocol evidence.
+
+- A `0x0A` status response or a 10-byte timestamped weight frame identifies an original Decent Scale (the timestamped variant adds power off and drops the unreliable command buffer).
+- Only a valid `0x22` voltage response promotes to HDS, and that alone grants extended commands and power off, not SoftSleep. HDS firmware v2.5.8 introduced `0x22` but SoftSleep only arrived in v2.6.3, so a voltage probe is not evidence of SoftSleep.
+- SoftSleep is gated separately on trustworthy modern firmware: HDS identity plus a decoded firmware version with major `>= 3`. HDS firmware before 3.0.1 does not report a version at all, so those scales use the shared display-off command while staying connected, rather than risk a `0A 04` they may not understand.
+- Display off, HDS SoftSleep, power off and BLE disconnect are separate. `ScalePowerMode.displayOff` never disconnects a healthy Decent Scale: original, unknown and pre-modern HDS scales all use the shared `0A 00` display-off command and keep weighing.
+- Unidentified scales stay conservative: shared weighing/tare/timer and shared display-off only, never `0A 04`, never power off.
+
+**Rules that came out of this:**
+
+- Maintenance is read-only. No periodic LED/status writes; notification age alone drives re-subscribe (12s) and disconnect (20s).
+- No heartbeat subsystem at all; every heartbeat-control byte is `00`.
+- Negotiation is unawaited so `connected` is still published promptly. Evidence is guarded by a profile-attempt token that is bound into the notification callback and re-armed on every connect and wake, so a late status/voltage frame after sleep, or a stale initialization attempt, cannot promote capabilities on a newer connection. Connection ownership uses a separate connection-attempt token: a superseded `onConnect()` returns before it can cancel the live transport listener or the maintenance loop.
+- Nonessential writes (LED/status, SoftSleep, power off) tolerate transient failures while notifications are still arriving; tare/timer still fail loudly.
+- Sleep never intentionally disconnects a healthy link. `displayOff` sends the shared `0A 00` command and retains the connection; proven HDS SoftSleep is attempted first and falls back to `0A 00` on failure. A failed display-off write is logged and the connection kept - only the transport watchdog tears down a genuinely dead link. Field report #874 showed the old disconnect-on-sleep policy churning a healthy original v1.1 scale after a 30-minute session.
+- Wake restores the same physical connection: `0A 01` LED-on for display-off, `0A 04 00` plus `0A 01` for SoftSleep. Capabilities are re-established only on a genuinely new connection, never merely because the display was toggled.
+- The 50ms duplicate write from the canonical de1app is applied only to profiles with the unreliable command buffer (7-byte weight frames).
+
+**Firmware decode:** status byte 5 is decoded against `{0xFE: 1.0, 0x02: 1.1, 0x03: 1.2}` (the public `pydecentscale` client's table, consistent with the plan's `original-fw=0x02 -> fw=1.1` example). Only v1.0 needs the 50ms duplicate command; only v1.2 supports power off. A timestamped 10-byte weight frame independently proves v1.2+. An unrecognised marker stays conservative.
+
+For modern HDS the same bytes 5-6 are a version: byte 5 is BCD (`majorTens << 4 | majorUnits`), byte 6 packs `minor << 4 | patch`. The low nibbles are raw 0-15, not decimal BCD digit pairs, so 3.1.14 legitimately arrives as `0x03 0x1E`. The 10-byte weight frame's `timestampMillis` is decisecond-resolution on the wire (`minute*600 + second*10 + decisecond`) and is scaled to milliseconds in the parser.
+
+**Known gap:** the marker table comes from a third-party client, not from Decent firmware source. Sub-version labelling needs confirmation against the original full-height hardware before the duplicate/power-off gates are trusted in the field.
+
 ## Gone-Device Error Handling
 
 `UniversalBleTransport._handleGattError()` catches `UniversalBleException` with gone-device codes:
@@ -515,6 +545,88 @@ last drives actual HTTP/WebSocket clients through DeviceController, SensorContro
 the JS bridge, and a fake GATT edge. Native bridge coverage uses
 UniversalBleTransport to prove CCCD reset and write-property error behavior.
 These checks do not replace hardware or Scale timing acceptance.
+## Skale firmware metadata
+
+Skale exposes its revision through the standard Device Information Service
+Firmware Revision String (`0x180A` / `0x2A26`). Treat it as opaque,
+connected-session metadata such as `R029`: discover the optional service before
+reading, decode strict UTF-8, ignore empty/malformed values and read failures,
+and fence the result by connection generation so a late read cannot repopulate
+metadata after disconnect or reconnect.
+
+Atomax does not publish a firmware update contract, so Decaid displays the
+revision only and does not infer update availability or implement Skale DFU.
+
+## Firmware Update: Erase/Verify Poll Fallback
+
+Some DE1 firmwares never emit the terminal firmware-map notification after erase
+or after verify. The old flow awaited that notify alone, so an update on such a
+machine timed out near completion even though the flash had finished.
+
+`UnifiedDe1Firmware._waitForFirmwareResponse` now races the existing notify
+future against `_pollFirmwareResponse`, which re-reads `fwMapRequest`
+(`Endpoint.fwMapRequest` / A009 / `[I]`) every 250 ms until a terminal response
+matches the stage predicate. Whichever arrives first wins. Firmware that does
+notify completes exactly as before; the poll simply loses the race.
+
+Terminal frames are 7 bytes: window, erase, map, then three error bytes. Erase
+is terminal only for `window=0, firmwareToErase=0, firmwareToMap=1` with error
+`ff ff ff`. During verify, that same `ff ff ff` error is pending/non-terminal;
+with the same first three fields, every other error tuple is terminal. `ff ff fd`
+is success, while `ff ff 01` is a terminal failure.
+
+### Both transports need a FRESH read
+
+`UnifiedDe1Transport.readFwMapRequestFresh` exists because the serial normal
+read path is cached, while BLE's public `read()` does make a fresh GATT read but
+is unsuitable here: timeout recovery may disconnect and reconnect mid-update.
+
+On **serial**, `_serialRead` hands back the last pushed `[I]` frame, which never
+changes once the firmware stops emitting the notify. `fwMapRequest` is already
+continuously `<+I>`-subscribed, and the firmware treats an add-notify as a
+force-update, so re-sending `<+I>` provokes a fresh `[I]`. Do not send the
+matching `<-I>` the way `_serialSingleNotifyRead` does: dropping the continuous
+subscription mid-update would blind the notify path that a stock DE1 still
+relies on.
+
+The read arms on the NEXT `[I]` frame before it provokes one. The subject
+replays its current value to a new listener, so the read skips one value - but
+only when the subject holds one. The subject is no longer seeded upstream, so an
+unconditional `skip(1)` would swallow the very frame the first poll of a
+connection provoked, and that read would time out.
+
+On **BLE**, a genuine GATT read of A009 returns the current value, but it must
+go through `_bleRead` rather than the public `read()`. `read()` recovers from a
+timeout with a disconnect and reconnect. This poll fires repeatedly across the
+flash-busy erase and verify windows, and tearing the link down mid-update would
+corrupt the in-flight firmware write. A failed poll read throws instead; the
+loop logs it and retries on the next cadence tick.
+
+### Timeout bounds
+
+| Bound | Value | Purpose |
+|---|---|---|
+| `_firmwareMapPollInterval` | 250 ms | Poll cadence. |
+| `_firmwareMapPollReadTimeout` | 2 s | Per-read bound, so one stalled read cannot hang the loop. |
+| `firmwareEraseTimeout` | 60 s | Whole erase stage. |
+| `firmwareVerificationTimeout` | 120 s | Whole verify stage. |
+
+The stage bounds were 30 s each. On-device erase and verify of a larger image
+can outlast 30 s while the machine emits only non-terminal frames, which tripped
+the outer timeout near completion. The stage bound is the only limit on the
+poll loop, so raising it grants more poll iterations and nothing else. A
+genuinely stuck erase still fails.
+
+Skale battery metadata uses the standard Battery Service (`0x180F`) and Battery
+Level characteristic (`0x2A19`). The value is optional device-reported metadata:
+only one-byte values from 0 through 100 are accepted. Failed, empty, malformed,
+or out-of-range reads clear the current value and do not fail the connection.
+Reads run on connect and on an injected 30-minute timer, with a single in-flight
+read and connection-generation fencing to prevent stale values after disconnect
+or reconnect. Historical de1app evidence reports fixed `100%` values on some
+Atomax firmware generations, while the observed R029 unit reports changing
+values, so the app must preserve the device value rather than manufacture a
+fallback percentage.
 
 ## Keeping Notes Fresh
 
