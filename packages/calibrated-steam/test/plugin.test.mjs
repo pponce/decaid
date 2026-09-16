@@ -63,16 +63,15 @@ test('configuration validation is read-only and reload replaces calculation sett
   assert.equal(call(instance, 'status').json.settings.referenceSeconds, 30);
 });
 
-test('planning targets persist as metadata without changing calculated time or workflow settings', () => {
+test('temperature notes persist as metadata without changing calculated time or workflow settings', () => {
   const input = {
     samples: [800, 400, 0].map(ageMs => ({ weightGrams: 330, ageMs })),
     pitcher: 'small', machineState: 'idle', stopAtTemperature: 0,
   };
   const baseline = call(plugin(), 'calculate', 'POST', input).json;
   for (const targetTemperatureC of [0, 55, 65]) {
-    const instance = plugin({ ...valid, targetMilkGrams: 160, targetTemperatureC });
+    const instance = plugin({ ...valid, targetTemperatureC });
     const saved = call(instance, 'status').json.settings;
-    assert.equal(saved.targetMilkGrams, 160);
     assert.equal(saved.referenceMilkGrams, 150);
     assert.equal(saved.targetTemperatureC, targetTemperatureC);
     instance.onLoad(JSON.parse(JSON.stringify(saved)));
@@ -80,6 +79,16 @@ test('planning targets persist as metadata without changing calculated time or w
     assert.equal(result.durationSeconds, baseline.durationSeconds);
     assert.deepEqual(result.workflowPatch, baseline.workflowPatch);
   }
+});
+
+test('removed target milk is ignored without changing saved actual calibration or Auto pitcher inputs', () => {
+  const instance = plugin({ ...valid, referenceMilkGrams: 158, targetMilkGrams: 200 });
+  const status = call(instance, 'status').json;
+  assert.equal(status.ready, true);
+  assert.equal(status.schema.targetMilkGrams, undefined);
+  assert.equal(status.settings.targetMilkGrams, undefined);
+  assert.equal(status.settings.referenceMilkGrams, 158);
+  assert.equal(status.settings.singleDrinkGrams, 160);
 });
 
 test('disabled, wrong-method and unknown-endpoint requests are explicit failures', () => {

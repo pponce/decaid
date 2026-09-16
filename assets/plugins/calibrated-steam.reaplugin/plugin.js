@@ -1,7 +1,7 @@
 /* Calibrated Steam Timer. GPL-3.0-only. Inspired by Damian / Damian-AU, DSx2. */
 (function () {
 "use strict";
-const MANIFEST = {"id":"calibrated-steam.reaplugin","name":"Auto Steam Calculator","author":"pponce; calculation and pitcher heuristic inspired by Damian / Damian-AU (DSx2)","description":"Estimate steam duration from milk weight using your calibration. Inspired by Damian's DSx2 calculator. This estimates temperature through time; it does not measure milk temperature.","version":"0.9.0","apiVersion":1,"permissions":["api","events.machine"],"settings":{"smallPitcherGrams":{"type":"number","label":"Small empty pitcher (g)","description":"Untared weight of the empty small pitcher. Leave blank or 0 if not configured.","default":0},"mediumPitcherGrams":{"type":"number","label":"Medium empty pitcher (g)","description":"Untared weight of the empty medium pitcher. Leave blank or 0 if not configured.","default":0},"largePitcherGrams":{"type":"number","label":"Large empty pitcher (g)","description":"Untared weight of the empty large pitcher. Leave blank or 0 if not configured.","default":0},"singleDrinkGrams":{"type":"number","label":"Usual milk per drink (g)","description":"Milk only for one drink; used to infer pitcher size in Auto. This can differ from your calibration milk weight.","default":0},"singleDrinkPitcher":{"type":"enum","label":"Pitcher normally used for one drink","description":"Select small or medium to choose the pitcher-detection thresholds.","values":["","small","medium"],"default":""},"weightMode":{"type":"enum","label":"Scale weight mode","description":"Gross includes the empty pitcher. Tared is milk only: pitcher size cannot be inferred and no pitcher weight is subtracted.","values":["gross","tared"],"default":"gross"},"targetMilkGrams":{"type":"number","label":"Target milk per reading (g)","description":"Milk amount to aim for when preparing each reading. Record the actual measured milk separately; for example, a 160 g target can have a 158 g measurement. Measurements never change this target.","default":200},"targetTemperatureC":{"type":"number","label":"Target calibration temperature (°C)","description":"Optional milk-temperature note only. It does not control the heater, stop steam or adjust calculated time. Aim for this same temperature for every reading. Update it and repeat the readings if you calibrate at a different temperature.","default":0},"referenceMilkGrams":{"type":"number","label":"Calibration milk weight (g)","description":"Milk only, excluding the pitcher, from your measured calibration run.","default":0},"referenceSeconds":{"type":"number","label":"Time to your desired milk temperature (s)","description":"Actual steaming time in the calibration run. Use similar milk, starting temperature and steaming technique for subsequent drinks.","default":0},"referenceFlow":{"type":"number","label":"Auto steam flow (ml/s)","description":"Fixed flow for single calibration, or default flow within the multiple-calibration range (0.4–2.5 ml/s).","default":0.4},"defaultPitcher":{"type":"enum","label":"Starting pitcher selection","description":"Small, Medium or Large subtracts that pitcher weight. Auto guesses the pitcher using milk per drink. Streamline remembers subsequent preset selections.","values":["small","medium","large","auto"],"default":"small"},"autoDetect":{"type":"boolean","label":"Offer Auto pitcher selection","description":"Enable automatic detection using Damian’s heuristic. Requires all three pitcher weights, gross scale weight, usual milk per drink and the pitcher normally used for one drink.","default":false},"calibrationMode":{"type":"enum","label":"Calibration type","values":["single","multiple"],"default":"single","description":"Single flow is fixed. Multiple flows interpolate between 2–4 measured calibrations."},"flowReadings":{"type":"string","label":"Measured flow calibrations","default":"[]","description":"Managed by the Calibration page. JSON readings with flow, milkGrams and seconds."}},"api":[{"id":"status","type":"http","data":{}},{"id":"calculate","type":"http","data":{}},{"id":"validate","type":"http","data":{}},{"id":"ui","type":"http","data":{}},{"id":"calibration","type":"http","data":{}}]};
+const MANIFEST = {"id":"calibrated-steam.reaplugin","name":"Auto Steam Calculator","author":"pponce; calculation and pitcher heuristic inspired by Damian / Damian-AU (DSx2)","description":"Estimate steam duration from milk weight using your calibration. Inspired by Damian's DSx2 calculator. This estimates temperature through time; it does not measure milk temperature.","version":"0.9.1","apiVersion":1,"permissions":["api","events.machine"],"settings":{"smallPitcherGrams":{"type":"number","label":"Small empty pitcher (g)","description":"Untared weight of the empty small pitcher. Leave blank or 0 if not configured.","default":0},"mediumPitcherGrams":{"type":"number","label":"Medium empty pitcher (g)","description":"Untared weight of the empty medium pitcher. Leave blank or 0 if not configured.","default":0},"largePitcherGrams":{"type":"number","label":"Large empty pitcher (g)","description":"Untared weight of the empty large pitcher. Leave blank or 0 if not configured.","default":0},"singleDrinkGrams":{"type":"number","label":"Usual milk per drink (g)","description":"Milk only for one drink; used to infer pitcher size in Auto. This can differ from your calibration milk weight.","default":0},"singleDrinkPitcher":{"type":"enum","label":"Pitcher normally used for one drink","description":"Select small or medium to choose the pitcher-detection thresholds.","values":["","small","medium"],"default":""},"weightMode":{"type":"enum","label":"Scale weight mode","description":"Gross includes the empty pitcher. Tared is milk only: pitcher size cannot be inferred and no pitcher weight is subtracted.","values":["gross","tared"],"default":"gross"},"targetTemperatureC":{"type":"number","label":"Target calibration temperature (°C)","description":"Optional milk-temperature note only. It does not control the heater, stop steam or adjust calculated time. Aim for this same temperature for every reading. Update it and repeat the readings if you calibrate at a different temperature.","default":0},"referenceMilkGrams":{"type":"number","label":"Calibration milk weight (g)","description":"Actual measured milk weight for this reading, excluding the pitcher. Enter it manually or capture it from the scale during guided calibration. Each reading uses its own measured weight.","default":0},"referenceSeconds":{"type":"number","label":"Time to your desired milk temperature (s)","description":"Actual steaming time in the calibration run. Use similar milk, starting temperature and steaming technique for subsequent drinks.","default":0},"referenceFlow":{"type":"number","label":"Auto steam flow (ml/s)","description":"Fixed flow for single calibration, or default flow within the multiple-calibration range (0.4–2.5 ml/s).","default":0.4},"defaultPitcher":{"type":"enum","label":"Starting pitcher selection","description":"Small, Medium or Large subtracts that pitcher weight. Auto guesses the pitcher using milk per drink. Streamline remembers subsequent preset selections.","values":["small","medium","large","auto"],"default":"small"},"autoDetect":{"type":"boolean","label":"Offer Auto pitcher selection","description":"Enable automatic detection using Damian’s heuristic. Requires all three pitcher weights, gross scale weight, usual milk per drink and the pitcher normally used for one drink.","default":false},"calibrationMode":{"type":"enum","label":"Calibration type","values":["single","multiple"],"default":"single","description":"Single flow is fixed. Multiple flows interpolate between 2–4 measured calibrations."},"flowReadings":{"type":"string","label":"Measured flow calibrations","default":"[]","description":"Managed by the Calibration page. JSON readings with flow, milkGrams and seconds."}},"api":[{"id":"status","type":"http","data":{}},{"id":"calculate","type":"http","data":{}},{"id":"validate","type":"http","data":{}},{"id":"ui","type":"http","data":{}},{"id":"calibration","type":"http","data":{}}]};
 function readFlowReadings(settings) {
   try {
     if (typeof settings.flowReadings !== 'string' || settings.flowReadings.length > 4096) return null;
@@ -387,10 +387,9 @@ function mountFlowCalibrationPage({ form, labels, field, updateChoices, syncFlow
   range.append(minimum.wrapper, maximum.wrapper, count.wrapper);
   const recommendation = make('p', 'Choose 3 or 4 readings for a wider range or a better estimate between measured flows.'); recommendation.className = 'full-width'; range.append(recommendation);
   const flowSlot = make('div'); config.append(flowSlot);
-  const target = { element: field('targetMilkGrams'), wrapper: labels.targetMilkGrams };
   const temperature = field('targetTemperatureC');
-  controls.push(target.element, temperature);
-  config.append(target.wrapper, labels.targetTemperatureC);
+  controls.push(temperature);
+  config.append(labels.targetTemperatureC);
   const notice = make('p'); notice.className = 'local-status full-width'; notice.id = 'flow-calibration-status'; notice.setAttribute('role', 'status'); notice.setAttribute('aria-live', 'polite'); config.append(notice);
   panel.insertBefore(config, manual);
   const steps = make('div'); steps.className = 'calibration-actions'; steps.id = 'flow-reading-steps'; panel.insertBefore(steps, manual);
@@ -442,7 +441,7 @@ function mountFlowCalibrationPage({ form, labels, field, updateChoices, syncFlow
     if (locked || next < 0 || next >= flows.length) return;
     index = next; reviewing = false; measurementReady = false; clearGuided();
     const reading = readings[index];
-    field('referenceMilkGrams').value = reading?.milkGrams || target.element.value;
+    field('referenceMilkGrams').value = reading?.milkGrams || '';
     field('referenceSeconds').value = reading?.seconds || '';
     notice.textContent = 'Changes only apply after save.';
     paint();
@@ -509,13 +508,12 @@ function mountFlowCalibrationPage({ form, labels, field, updateChoices, syncFlow
       measurementReady = true; reviewing = false; paint();
     },
     flowChanged() {
-      if (!multiple) { flows = [Number(field('referenceFlow').value)]; readings = [null]; measurementReady = false; clearGuided(); reviewing = false; }
+      if (!multiple) { flows = [Number(field('referenceFlow').value)]; readings = [null]; field('referenceMilkGrams').value = ''; measurementReady = false; clearGuided(); reviewing = false; }
       paint();
     },
     reveal(key) { reviewing = false; if (['referenceMilkGrams', 'referenceSeconds'].includes(key)) guidedMode = false; paint(); },
     assertCanSave() {
-      const milkTarget = Number(target.element.value), temperatureTarget = Number(temperature.value);
-      if (!Number.isFinite(milkTarget) || milkTarget < 10 || milkTarget > 1500) throw Object.assign(new Error('Target milk per reading must be between 10 and 1500 g.'), { field: 'targetMilkGrams' });
+      const temperatureTarget = Number(temperature.value);
       if (!Number.isFinite(temperatureTarget) || temperatureTarget < 0 || temperatureTarget > 100) throw Object.assign(new Error('Enter a target milk temperature between 0 and 100 °C, or leave the note blank.'), { field: 'targetTemperatureC' });
       if (multiple && (!planValid || flows.length < 2 || readings.length !== flows.length || !readings.every(validReading))) {
         reviewing = false; paint(); throw Object.assign(new Error('Complete and use every flow reading before saving.'), { field: 'flowReadings' });
@@ -833,7 +831,7 @@ function settingsBrowser(resolveReturnUrl, mountCalibration, captureWeight, pitc
       status.textContent = 'Flow changed. Measure a new calibration time at this flow.';
       guided?.flowChanged();
     }
-    flowPlan?.flowChanged();
+    if (changed) flowPlan?.flowChanged();
     updateChoices();
   }
   async function load() {
@@ -856,7 +854,7 @@ function settingsBrowser(resolveReturnUrl, mountCalibration, captureWeight, pitc
         ['general', 'General settings', ['referenceFlow', 'weightMode', 'defaultPitcher']],
         ['pitchers', 'Empty pitcher weights', ['smallPitcherGrams', 'mediumPitcherGrams', 'largePitcherGrams']],
         ['pitchers', 'Automatic pitcher selection', ['autoDetect', 'singleDrinkGrams', 'singleDrinkPitcher']],
-        ['calibration', 'Manual calibration / measured values', ['targetMilkGrams', 'targetTemperatureC', 'referenceMilkGrams', 'referenceSeconds']],
+        ['calibration', 'Manual calibration / measured values', ['targetTemperatureC', 'referenceMilkGrams', 'referenceSeconds']],
       ];
       const captions = { smallPitcherGrams: 'Small (g)', mediumPitcherGrams: 'Medium (g)', largePitcherGrams: 'Large (g)', referenceFlow: 'Steam flow (ml/s)', weightMode: 'Scale weight mode', defaultPitcher: 'Starting pitcher selection' };
       const hints = { smallPitcherGrams: 'Empty pitcher. Blank means unused.', mediumPitcherGrams: 'Empty pitcher. Blank means unused.', largePitcherGrams: 'Empty pitcher. Blank means unused.', referenceFlow: 'Shared with Calibration. Used for all Auto steaming.', weightMode: 'Gross: pitcher + milk. Tared: milk only.' };
@@ -877,7 +875,6 @@ function settingsBrowser(resolveReturnUrl, mountCalibration, captureWeight, pitc
           else {
             input.type = 'number'; input.step = 'any'; input.inputMode = 'decimal'; input.min = '0';
             if (key === 'referenceFlow') { input.min = '0.4'; input.max = '2.5'; input.step = '0.1'; }
-            if (key === 'targetMilkGrams') { input.min = '10'; input.max = '1500'; }
             if (key === 'targetTemperatureC') { input.max = '100'; input.placeholder = 'Optional'; }
           }
           if (item.type !== 'boolean') input.value = item.type === 'number' && data.settings[key] === 0 ? '' : data.settings[key];
@@ -890,7 +887,7 @@ function settingsBrowser(resolveReturnUrl, mountCalibration, captureWeight, pitc
       const instructions = [
         ['1 · Configure pitchers', 'In Pitchers & Auto, enter at least one empty pitcher weight. To measure it, tare the empty scale, wait for stable zero, place the empty pitcher, then select its Set from scale button. The first configured pitcher becomes the starting selection; change it in General if desired.'],
         ['2 · Choose how milk is weighed', 'General offers Gross (pitcher + milk) or Tared (milk only). For automatic pitcher selection, use Gross and configure all three pitcher weights, usual milk per drink and the Small or Medium pitcher normally used for one drink. Only configured choices appear on the shot page.'],
-        ['3 · Plan calibration', 'Choose Single flow for a fixed Auto flow, or Multiple flows for adjustment within a measured range. Select 2–4 readings; 3 or 4 are recommended for wider ranges. Set the milk amount you aim to use and optionally note your target milk temperature. Use fresh milk, the same pitcher, starting temperature, heater setting and technique for every reading. Aim for the same target milk temperature throughout the set.'],
+        ['3 · Plan calibration', 'Choose Single flow for a fixed Auto flow, or Multiple flows for adjustment within a measured range. Select 2–4 readings; 3 or 4 are recommended for wider ranges. Optionally note your target milk temperature. Use fresh milk, the same pitcher, starting temperature, heater setting and technique for every reading. Aim for the same target milk temperature throughout the set. Record the actual milk-only weight for each reading.'],
         ['4 · Measure manually or with guidance', 'For manual entry, steam at the flow shown for that reading and enter the actual milk-only weight and measured steaming time. For guided entry, tare the empty scale, wait for zero, place the pitcher with milk, and capture. Prepare calibration applies the reading’s flow. Start steam, then stop at your target milk temperature. The counter excludes warm-up. Guided calibration always subtracts the chosen pitcher from gross weight.'],
         ['5 · Review and save', 'Use values and next moves through unfinished readings. Use values and review shows the compact summary. Edit any reading to adjust values or run a new guided calibration. Saved readings reopen in the compact view. Changes only apply after save; leaving without saving discards edits. Changing the planned flow range or reading count clears the draft readings.'],
         ['6 · Make a drink', 'Select Auto in the shot-page steam controls, weigh the filled pitcher and tap its S, M, L or Auto preset. Tapping the same preset again recalculates for the new milk. Check the calculated time before starting steam. Single flow is fixed; multiple-flow calibration allows flow changes within its measured range, followed by a new calculation. Manual Flow and Time remain available. Off reminds you to calculate; it is not a hard start interlock.'],
@@ -900,7 +897,7 @@ function settingsBrowser(resolveReturnUrl, mountCalibration, captureWeight, pitc
         section.append(make('h2', heading), make('p', text)); panels.instructions.append(section);
       }
       const glossary = make('dl'); glossary.className = 'glossary';
-      const glossaryKeys = ['referenceFlow', 'weightMode', 'defaultPitcher', 'smallPitcherGrams', 'mediumPitcherGrams', 'largePitcherGrams', 'autoDetect', 'singleDrinkGrams', 'singleDrinkPitcher', 'calibrationMode', 'targetMilkGrams', 'targetTemperatureC', 'referenceMilkGrams', 'referenceSeconds'];
+      const glossaryKeys = ['referenceFlow', 'weightMode', 'defaultPitcher', 'smallPitcherGrams', 'mediumPitcherGrams', 'largePitcherGrams', 'autoDetect', 'singleDrinkGrams', 'singleDrinkPitcher', 'calibrationMode', 'targetTemperatureC', 'referenceMilkGrams', 'referenceSeconds'];
       for (const key of glossaryKeys) glossary.append(make('dt', schema[key].label), make('dd', schema[key].description));
       for (const [term, meaning] of [
         ['Minimum / maximum flow', 'Lowest and highest flows you will measure. Auto can interpolate only inside this range. Changing the range clears draft readings.'],

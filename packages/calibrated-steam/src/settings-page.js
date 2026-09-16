@@ -80,7 +80,7 @@ function settingsBrowser(resolveReturnUrl, mountCalibration, captureWeight, pitc
       status.textContent = 'Flow changed. Measure a new calibration time at this flow.';
       guided?.flowChanged();
     }
-    flowPlan?.flowChanged();
+    if (changed) flowPlan?.flowChanged();
     updateChoices();
   }
   async function load() {
@@ -103,7 +103,7 @@ function settingsBrowser(resolveReturnUrl, mountCalibration, captureWeight, pitc
         ['general', 'General settings', ['referenceFlow', 'weightMode', 'defaultPitcher']],
         ['pitchers', 'Empty pitcher weights', ['smallPitcherGrams', 'mediumPitcherGrams', 'largePitcherGrams']],
         ['pitchers', 'Automatic pitcher selection', ['autoDetect', 'singleDrinkGrams', 'singleDrinkPitcher']],
-        ['calibration', 'Manual calibration / measured values', ['targetMilkGrams', 'targetTemperatureC', 'referenceMilkGrams', 'referenceSeconds']],
+        ['calibration', 'Manual calibration / measured values', ['targetTemperatureC', 'referenceMilkGrams', 'referenceSeconds']],
       ];
       const captions = { smallPitcherGrams: 'Small (g)', mediumPitcherGrams: 'Medium (g)', largePitcherGrams: 'Large (g)', referenceFlow: 'Steam flow (ml/s)', weightMode: 'Scale weight mode', defaultPitcher: 'Starting pitcher selection' };
       const hints = { smallPitcherGrams: 'Empty pitcher. Blank means unused.', mediumPitcherGrams: 'Empty pitcher. Blank means unused.', largePitcherGrams: 'Empty pitcher. Blank means unused.', referenceFlow: 'Shared with Calibration. Used for all Auto steaming.', weightMode: 'Gross: pitcher + milk. Tared: milk only.' };
@@ -124,7 +124,6 @@ function settingsBrowser(resolveReturnUrl, mountCalibration, captureWeight, pitc
           else {
             input.type = 'number'; input.step = 'any'; input.inputMode = 'decimal'; input.min = '0';
             if (key === 'referenceFlow') { input.min = '0.4'; input.max = '2.5'; input.step = '0.1'; }
-            if (key === 'targetMilkGrams') { input.min = '10'; input.max = '1500'; }
             if (key === 'targetTemperatureC') { input.max = '100'; input.placeholder = 'Optional'; }
           }
           if (item.type !== 'boolean') input.value = item.type === 'number' && data.settings[key] === 0 ? '' : data.settings[key];
@@ -137,7 +136,7 @@ function settingsBrowser(resolveReturnUrl, mountCalibration, captureWeight, pitc
       const instructions = [
         ['1 · Configure pitchers', 'In Pitchers & Auto, enter at least one empty pitcher weight. To measure it, tare the empty scale, wait for stable zero, place the empty pitcher, then select its Set from scale button. The first configured pitcher becomes the starting selection; change it in General if desired.'],
         ['2 · Choose how milk is weighed', 'General offers Gross (pitcher + milk) or Tared (milk only). For automatic pitcher selection, use Gross and configure all three pitcher weights, usual milk per drink and the Small or Medium pitcher normally used for one drink. Only configured choices appear on the shot page.'],
-        ['3 · Plan calibration', 'Choose Single flow for a fixed Auto flow, or Multiple flows for adjustment within a measured range. Select 2–4 readings; 3 or 4 are recommended for wider ranges. Set the milk amount you aim to use and optionally note your target milk temperature. Use fresh milk, the same pitcher, starting temperature, heater setting and technique for every reading. Aim for the same target milk temperature throughout the set.'],
+        ['3 · Plan calibration', 'Choose Single flow for a fixed Auto flow, or Multiple flows for adjustment within a measured range. Select 2–4 readings; 3 or 4 are recommended for wider ranges. Optionally note your target milk temperature. Use fresh milk, the same pitcher, starting temperature, heater setting and technique for every reading. Aim for the same target milk temperature throughout the set. Record the actual milk-only weight for each reading.'],
         ['4 · Measure manually or with guidance', 'For manual entry, steam at the flow shown for that reading and enter the actual milk-only weight and measured steaming time. For guided entry, tare the empty scale, wait for zero, place the pitcher with milk, and capture. Prepare calibration applies the reading’s flow. Start steam, then stop at your target milk temperature. The counter excludes warm-up. Guided calibration always subtracts the chosen pitcher from gross weight.'],
         ['5 · Review and save', 'Use values and next moves through unfinished readings. Use values and review shows the compact summary. Edit any reading to adjust values or run a new guided calibration. Saved readings reopen in the compact view. Changes only apply after save; leaving without saving discards edits. Changing the planned flow range or reading count clears the draft readings.'],
         ['6 · Make a drink', 'Select Auto in the shot-page steam controls, weigh the filled pitcher and tap its S, M, L or Auto preset. Tapping the same preset again recalculates for the new milk. Check the calculated time before starting steam. Single flow is fixed; multiple-flow calibration allows flow changes within its measured range, followed by a new calculation. Manual Flow and Time remain available. Off reminds you to calculate; it is not a hard start interlock.'],
@@ -147,7 +146,7 @@ function settingsBrowser(resolveReturnUrl, mountCalibration, captureWeight, pitc
         section.append(make('h2', heading), make('p', text)); panels.instructions.append(section);
       }
       const glossary = make('dl'); glossary.className = 'glossary';
-      const glossaryKeys = ['referenceFlow', 'weightMode', 'defaultPitcher', 'smallPitcherGrams', 'mediumPitcherGrams', 'largePitcherGrams', 'autoDetect', 'singleDrinkGrams', 'singleDrinkPitcher', 'calibrationMode', 'targetMilkGrams', 'targetTemperatureC', 'referenceMilkGrams', 'referenceSeconds'];
+      const glossaryKeys = ['referenceFlow', 'weightMode', 'defaultPitcher', 'smallPitcherGrams', 'mediumPitcherGrams', 'largePitcherGrams', 'autoDetect', 'singleDrinkGrams', 'singleDrinkPitcher', 'calibrationMode', 'targetTemperatureC', 'referenceMilkGrams', 'referenceSeconds'];
       for (const key of glossaryKeys) glossary.append(make('dt', schema[key].label), make('dd', schema[key].description));
       for (const [term, meaning] of [
         ['Minimum / maximum flow', 'Lowest and highest flows you will measure. Auto can interpolate only inside this range. Changing the range clears draft readings.'],

@@ -110,9 +110,10 @@ four adds two evenly spaced interior points, rounded to 0.1 ml/s. A range must
 allow distinct points at least 0.1 ml/s apart. For 0.4–2.5 ml/s, the four points
 are 0.4, 1.1, 1.8 and 2.5 ml/s. The default Auto flow must lie within that range.
 
-Set **Target milk per reading (g)** to the amount you intend to prepare. This is
-saved independently from the actual measured milk weight: a 160 g target stays
-160 g when a reading uses 158 g. Calculations use the actual measurement.
+Record the **actual milk-only weight for every reading**. New manual readings
+start blank and require the measured weight; guided calibration fills it from
+the scale after subtracting the selected pitcher. Each reading stores and uses
+its own actual weight. Editing a saved reading retains its measured values.
 
 **Target calibration temperature (°C)** is an optional milk-temperature note,
 initially blank. It does not set the steam heater, stop steam, or change calculated
@@ -123,8 +124,8 @@ summary. Editing the note alone does not adjust existing measurements.
 
 For each point, use the same pitcher,
 milk starting temperature, target temperature, heater setting and technique. Use
-fresh milk for each run, not milk already heated by the previous reading. Record
-the actual milk weight if it differs slightly from the target.
+fresh milk for each run, not milk already heated by the previous reading. Similar
+amounts help keep technique consistent, but record each actual milk weight.
 
 Each point offers manual time entry or the existing guided calibration. The
 reading heading shows its required flow. Guided Prepare applies that flow, not
@@ -160,8 +161,8 @@ at their desired temperature. The measured counter follows machine snapshot
 `pouring` time, excluding warm-up, and waits for confirmed idle before completing.
 Runs reaching the timer ceiling, paused runs and interrupted telemetry are not
 accepted as calibration. After review, Save stores values and returns to settings.
-Changing a single calibration flow clears its measured time and requires a new
-measurement. Changing a multiple calibration default inside the measured range
+Changing a single calibration flow clears its measured weight and time and
+requires a new measurement. Changing a multiple calibration default inside the measured range
 does not discard readings. Capture fresh milk to repeat any guided reading.
 
 The plugin owns preparation and restoration; the page renews its session lease.
@@ -268,12 +269,11 @@ in multiple mode the readings are authoritative. `referenceFlow` is the shared
 fixed/default flow, with a default of 0.4. Changing that default does not mutate
 multiple readings.
 
-`targetMilkGrams` is the planned milk quantity (default 200 g), separate from
-`referenceMilkGrams` and each reading's actual `milkGrams`. `targetTemperatureC`
-is an optional shared milk-temperature note (0 means unspecified). Neither field
-is used by the duration calculation or sent as a machine setting. Skins should
-preserve these settings when editing configuration; using the shared settings
-page handles this automatically.
+`referenceMilkGrams` and each reading's `milkGrams` store actual measured milk
+weight. `targetTemperatureC` is an optional shared milk-temperature note (0 means
+unspecified). The note is not used by the duration calculation or sent as a
+machine setting. Skins should preserve it when editing configuration; using the
+shared settings page handles this automatically.
 
 A `calculate` body may include optional numeric `flow`. If omitted, the plugin
 uses `referenceFlow`. Single mode

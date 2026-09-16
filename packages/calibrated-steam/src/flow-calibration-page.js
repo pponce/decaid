@@ -34,10 +34,9 @@ function mountFlowCalibrationPage({ form, labels, field, updateChoices, syncFlow
   range.append(minimum.wrapper, maximum.wrapper, count.wrapper);
   const recommendation = make('p', 'Choose 3 or 4 readings for a wider range or a better estimate between measured flows.'); recommendation.className = 'full-width'; range.append(recommendation);
   const flowSlot = make('div'); config.append(flowSlot);
-  const target = { element: field('targetMilkGrams'), wrapper: labels.targetMilkGrams };
   const temperature = field('targetTemperatureC');
-  controls.push(target.element, temperature);
-  config.append(target.wrapper, labels.targetTemperatureC);
+  controls.push(temperature);
+  config.append(labels.targetTemperatureC);
   const notice = make('p'); notice.className = 'local-status full-width'; notice.id = 'flow-calibration-status'; notice.setAttribute('role', 'status'); notice.setAttribute('aria-live', 'polite'); config.append(notice);
   panel.insertBefore(config, manual);
   const steps = make('div'); steps.className = 'calibration-actions'; steps.id = 'flow-reading-steps'; panel.insertBefore(steps, manual);
@@ -89,7 +88,7 @@ function mountFlowCalibrationPage({ form, labels, field, updateChoices, syncFlow
     if (locked || next < 0 || next >= flows.length) return;
     index = next; reviewing = false; measurementReady = false; clearGuided();
     const reading = readings[index];
-    field('referenceMilkGrams').value = reading?.milkGrams || target.element.value;
+    field('referenceMilkGrams').value = reading?.milkGrams || '';
     field('referenceSeconds').value = reading?.seconds || '';
     notice.textContent = 'Changes only apply after save.';
     paint();
@@ -156,13 +155,12 @@ function mountFlowCalibrationPage({ form, labels, field, updateChoices, syncFlow
       measurementReady = true; reviewing = false; paint();
     },
     flowChanged() {
-      if (!multiple) { flows = [Number(field('referenceFlow').value)]; readings = [null]; measurementReady = false; clearGuided(); reviewing = false; }
+      if (!multiple) { flows = [Number(field('referenceFlow').value)]; readings = [null]; field('referenceMilkGrams').value = ''; measurementReady = false; clearGuided(); reviewing = false; }
       paint();
     },
     reveal(key) { reviewing = false; if (['referenceMilkGrams', 'referenceSeconds'].includes(key)) guidedMode = false; paint(); },
     assertCanSave() {
-      const milkTarget = Number(target.element.value), temperatureTarget = Number(temperature.value);
-      if (!Number.isFinite(milkTarget) || milkTarget < 10 || milkTarget > 1500) throw Object.assign(new Error('Target milk per reading must be between 10 and 1500 g.'), { field: 'targetMilkGrams' });
+      const temperatureTarget = Number(temperature.value);
       if (!Number.isFinite(temperatureTarget) || temperatureTarget < 0 || temperatureTarget > 100) throw Object.assign(new Error('Enter a target milk temperature between 0 and 100 °C, or leave the note blank.'), { field: 'targetTemperatureC' });
       if (multiple && (!planValid || flows.length < 2 || readings.length !== flows.length || !readings.every(validReading))) {
         reviewing = false; paint(); throw Object.assign(new Error('Complete and use every flow reading before saving.'), { field: 'flowReadings' });
