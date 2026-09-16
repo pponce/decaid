@@ -1,7 +1,8 @@
 [
   {
-    "type": "github_release",
-    "repo": "allofmeng/streamline_project"
+    "type": "github_branch",
+    "repo": "pponce/streamline-js",
+    "branch": "feature/calibrated-steam-timer"
   },
   {
     "type": "github_release",

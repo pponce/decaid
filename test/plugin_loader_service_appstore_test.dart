@@ -193,6 +193,40 @@ function createPlugin() {
       if (tempDir.existsSync()) tempDir.deleteSync(recursive: true);
     });
 
+    test(
+      'calibrated steam is bundled but requires explicit enablement',
+      () async {
+        const id = 'calibrated-steam.reaplugin';
+        expect(service.getPluginManifest(id), isNotNull);
+        expect(await service.shouldAutoLoad(id), isFalse);
+        expect(
+          service.pluginManager.loadedPlugins.any(
+            (plugin) => plugin.pluginId == id,
+          ),
+          isFalse,
+        );
+
+        await service.enablePlugin(id);
+        expect(await service.shouldAutoLoad(id), isTrue);
+        expect(
+          service.pluginManager.loadedPlugins.any(
+            (plugin) => plugin.pluginId == id,
+          ),
+          isTrue,
+        );
+
+        await service.setPluginAutoLoad(id, false);
+        await service.dispose();
+        final fresh = PluginLoaderService(
+          kvStore: kvStore,
+          credentialStore: credentialStore,
+        );
+        addTearDown(fresh.dispose);
+        await fresh.initialize();
+        expect(await fresh.shouldAutoLoad(id), isFalse);
+      },
+    );
+
     test('addPlugin installs a plugin from a real source directory', () async {
       const id = 'installed.reaplugin';
       final source = makePluginSource(id);

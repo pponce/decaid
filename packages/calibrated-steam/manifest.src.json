@@ -1,0 +1,138 @@
+{
+  "id": "calibrated-steam.reaplugin",
+  "name": "Auto Steam Calculator",
+  "author": "pponce; calculation and pitcher heuristic inspired by Damian / Damian-AU (DSx2)",
+  "description": "Estimate steam duration from milk weight using your calibration. Inspired by Damian's DSx2 calculator. This estimates temperature through time; it does not measure milk temperature.",
+  "version": "0.7.0",
+  "apiVersion": 1,
+  "permissions": [
+    "api",
+    "events.machine"
+  ],
+  "settings": {
+    "smallJugGrams": {
+      "type": "number",
+      "label": "Small empty pitcher (g)",
+      "description": "Untared weight of the empty small pitcher. Leave blank or 0 if not configured.",
+      "default": 0
+    },
+    "mediumJugGrams": {
+      "type": "number",
+      "label": "Medium empty pitcher (g)",
+      "description": "Untared weight of the empty medium pitcher. Leave blank or 0 if not configured.",
+      "default": 0
+    },
+    "largeJugGrams": {
+      "type": "number",
+      "label": "Large empty pitcher (g)",
+      "description": "Untared weight of the empty large pitcher. Leave blank or 0 if not configured.",
+      "default": 0
+    },
+    "singleDrinkGrams": {
+      "type": "number",
+      "label": "Usual milk per drink (g)",
+      "description": "Milk only for one drink; used to infer pitcher size in Auto. This can differ from your calibration milk weight.",
+      "default": 0
+    },
+    "singleDrinkJug": {
+      "type": "enum",
+      "label": "Pitcher normally used for one drink",
+      "description": "Select small or medium to choose the pitcher-detection thresholds.",
+      "values": [
+        "",
+        "small",
+        "medium"
+      ],
+      "default": ""
+    },
+    "weightMode": {
+      "type": "enum",
+      "label": "Scale weight mode",
+      "description": "Gross includes the empty pitcher. Tared is milk only: pitcher size cannot be inferred and no pitcher weight is subtracted.",
+      "values": [
+        "gross",
+        "tared"
+      ],
+      "default": "gross"
+    },
+    "referenceMilkGrams": {
+      "type": "number",
+      "label": "Calibration milk weight (g)",
+      "description": "Milk only, excluding the pitcher, from your measured calibration run.",
+      "default": 0
+    },
+    "referenceSeconds": {
+      "type": "number",
+      "label": "Time to your desired milk temperature (s)",
+      "description": "Actual steaming time in the calibration run. Use similar milk, starting temperature and steaming technique for subsequent drinks.",
+      "default": 0
+    },
+    "referenceFlow": {
+      "type": "number",
+      "label": "Auto steam flow (ml/s)",
+      "description": "Fixed flow for single calibration, or default flow within the multiple-calibration range (0.4\u20132.5 ml/s).",
+      "default": 0.4
+    },
+    "defaultJug": {
+      "type": "enum",
+      "label": "Starting pitcher selection",
+      "description": "Small, Medium or Large subtracts that pitcher weight. Auto guesses the pitcher using milk per drink. Streamline remembers subsequent preset selections.",
+      "values": [
+        "small",
+        "medium",
+        "large",
+        "auto"
+      ],
+      "default": "small"
+    },
+    "autoDetect": {
+      "type": "boolean",
+      "label": "Offer Auto pitcher selection",
+      "description": "Enable automatic detection using Damian\u2019s heuristic. Requires all three pitcher weights, gross scale weight, usual milk per drink and the pitcher normally used for one drink.",
+      "default": false
+    },
+    "calibrationMode": {
+      "type": "enum",
+      "label": "Calibration type",
+      "values": [
+        "single",
+        "multiple"
+      ],
+      "default": "single",
+      "description": "Single flow is fixed. Multiple flows interpolate between 2\u20134 measured calibrations."
+    },
+    "flowReadings": {
+      "type": "string",
+      "label": "Measured flow calibrations",
+      "default": "[]",
+      "description": "Managed by the Calibration page. JSON readings with flow, milkGrams and seconds."
+    }
+  },
+  "api": [
+    {
+      "id": "status",
+      "type": "http",
+      "data": {}
+    },
+    {
+      "id": "calculate",
+      "type": "http",
+      "data": {}
+    },
+    {
+      "id": "validate",
+      "type": "http",
+      "data": {}
+    },
+    {
+      "id": "ui",
+      "type": "http",
+      "data": {}
+    },
+    {
+      "id": "calibration",
+      "type": "http",
+      "data": {}
+    }
+  ]
+}

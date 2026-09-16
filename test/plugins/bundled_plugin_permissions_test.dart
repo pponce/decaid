@@ -8,6 +8,7 @@ import 'package:reaprime/src/plugins/plugin_version.dart';
 
 void main() {
   const requiredPermissions = <String, Set<PluginPermissions>>{
+    'calibrated-steam.reaplugin': {PluginPermissions.api},
     'time-to-ready.reaplugin': {
       PluginPermissions.log,
       PluginPermissions.emit,
